@@ -8,6 +8,10 @@
 #define MAX_USERNAME_SIZE 32;
 #define MAX_STRING_LENGTH 512
 
+typedef struct UserNode{
+    char* username;
+    struct userNode* next;
+} UserNode;
 
 typedef struct UserState {
   char* username;
@@ -19,11 +23,6 @@ typedef struct UserState {
 struct TrackerState {
   UserNode * first;
 };
-
-typedef struct UserNode{
-    char* username;
-    struct userNode* next;
-} UserNode;
 
 typedef struct File{
     char* name;
