@@ -50,7 +50,7 @@ int main(int argc,char ** argv){
     */
 
     char peerPortStr[6];
-    sprintf(peerPortStr, "%d",args.peerSocksPort);
+    sprintf(peerPortStr, "%d",args.leekerSocksPort);
     int leekerSocket = setupLeekerSocket(peerPortStr, &err_msg);
     if (leekerSocket < 0) goto finally;
 

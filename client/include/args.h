@@ -18,8 +18,8 @@ struct tracker_args {
     char           *tracker_socks_addr;
     unsigned short  trackerSocksPort;
 
-    char           *peer_socks_addr;
-    unsigned short  peerSocksPort;
+    char           *leeker_socks_addr;
+    unsigned short  leekerSocksPort;
 
     char *          mng_addr;
     unsigned short  mng_port;
