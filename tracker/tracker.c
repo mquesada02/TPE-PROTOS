@@ -192,32 +192,30 @@ void registerUser(char * username, char * password) {
 }
 
 bool calculateMD5(char* filename, char md5Buffer[MD5_SIZE + 1]) {
-    // FILE * stream = NULL;
-    // char * fileName = NULL;
-    // char outBuffer[BUFFER_MAX_SIZE];
-    // int len = 0;
-    // char cmd[MAX_FILE_LEN] = "md5sum ";
-    // size_t size;
-    // while ((len = getline(&fileName, &size, stdin)) != EOF) {
+  FILE *file = fopen(filename, "rb");
+  if (file == NULL) {
+    perror("Error opening file");
+    return false;
+  }
 
-    //     fileName[len-1] = '\0';
-        
-    //     char buff[BUFFER_MAX_SIZE] = "";
-    //     strcat(buff,cmd);
-    //     strcat(buff, fileName);
-    //     strcat(buff," | cut -b -32");
-        
-    //     stream = popen(buff,"r");   
-    //     md5Buffer[MD5_LEN] = '\0';
-    //     fgets(md5Buffer,MD5_LEN+1,stream);
-        
-    //     pclose(stream);
+  MD5_CTX md5Context;
+  MD5_Init(&md5Context);
 
-    //     len = sprintf(outBuffer,"%s - %s - %d\n",fileName,md5Buffer,getpid());
-    //     write(STDOUT_FILENO, outBuffer,len);
-    //     free(fileName);
-    //     fileName = NULL;
-    // }
-    // free(fileName);
-    return true;
+  unsigned char data[1024];
+  size_t bytesRead;
+  while ((bytesRead = fread(data, 1, sizeof(data), file)) != 0) {
+    MD5_Update(&md5Context, data, bytesRead);
+  }
+
+  unsigned char hash[MD5_DIGEST_LENGTH];
+  MD5_Final(hash, &md5Context);
+
+  fclose(file);
+
+  for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+    snprintf(&md5Buffer[i * 2], 3, "%02x", hash[i]);
+  }
+  md5Buffer[MD5_SIZE] = '\0';
+
+  return true;
 }
