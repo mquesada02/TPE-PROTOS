@@ -20,7 +20,7 @@ void tracker_handler(struct selector_key * key);
 
 char * getUser(char* username, char* users);
 
-bool loginUser(char * username, char * password);
+int loginUser(char * username, char * password);
 
 void registerUser(char * username, char * password);
 
