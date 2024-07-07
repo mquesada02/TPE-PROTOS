@@ -4,6 +4,7 @@
 
 #include <sys/socket.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include "../include/selector.h"
 
@@ -20,9 +21,6 @@ struct leekerMng {
 
     char requestBuffer[REQUEST_BUFFER_SIZE];
 
-    int socket;
-
-    size_t responseBufferSize;
     char * responseBuffer;
 
 };
@@ -78,5 +76,53 @@ void leekerRead(struct selector_key *key) {
         return;
     }
 
-    printf("%s", ATTACHMENT(key)->requestBuffer);
+    //HASH:BYTE_FROM:BYTE_TO
+    char hash[256];
+    char tempByteFrom[256];
+    char tempByteTo[256];
+
+    // Split the received string
+    char *token = strtok(ATTACHMENT(key)->requestBuffer, ":");
+    if (token == NULL)
+        goto error;
+    strcpy(hash, token);
+
+    token = strtok(NULL, ":");
+    if (token == NULL)
+        goto error;
+    strcpy(tempByteFrom, token);
+
+    token = strtok(NULL, ":");
+    if (token == NULL)
+        goto error;
+    strcpy(tempByteTo, token);
+
+    if (strtok(NULL, ":") != NULL)
+        goto error;
+
+    // Validate and convert byteFrom and byteTo
+    //if (!isValidNumber(tempByteFrom) || !isValidNumber(tempByteTo))
+    //    goto error;
+
+    int byteFrom = atoi(tempByteFrom);
+    int byteTo = atoi(tempByteTo);
+
+    int size = byteTo - byteFrom;
+
+    if (size <= 0)
+        goto error;
+
+    ATTACHMENT(key)->responseBuffer = malloc(size + 1);
+
+    //getPacket(ATTACHMENT(key)->responseBuffer, hash, byteFrom, size);
+    //send(...)
+
+    printf("%s, %d, %d\n", hash, byteFrom, size);
+
+    free(ATTACHMENT(key)->responseBuffer);
+    return;
+
+    error:
+    //TODO limpiar todo si falla
+    printf("Roto todo\n");
 }
