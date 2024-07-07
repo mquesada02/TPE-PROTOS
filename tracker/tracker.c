@@ -5,23 +5,23 @@
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
 #define MD5_SIZE 32
-#define MAX_USERNAME_SIZE 32;
+#define MAX_USERNAME_SIZE 32
 #define MAX_STRING_LENGTH 512
 
 typedef struct UserNode{
-    char* username;
-    struct userNode* next;
+    char username[MAX_USERNAME_SIZE];
+    struct UserNode* next;
 } UserNode;
 
 typedef struct UserState {
-  char* username;
+  char username[MAX_USERNAME_SIZE];
   char* ip;
   char* port;
-  UserNode * next;
+  struct UserState * next;
 } UserState;
 
 struct TrackerState {
-  UserNode * first;
+  UserState * first;
 };
 
 typedef struct File{
@@ -36,6 +36,9 @@ typedef struct FileList{
     File* file;
     struct FileList* next;
 } FileList;
+
+struct TrackerState * state = NULL;
+FileList * fileList = NULL;
 
 static bool done = false;
 FILE * users = NULL;
@@ -133,12 +136,127 @@ int main(int argc,char ** argv){
   return 0;
 }
 
-void handleCmd(char * cmd) {
-  if (strcmp(cmd, "PLAIN") == 0) {
+UserState * _insertUser(UserState * node, UserState value) {
+  if (node == NULL) {
+    UserState * newNode = malloc(sizeof(UserState));
+    strcpy(newNode->username, value.username);
+    newNode->ip = value.ip;
+    newNode->port = value.port;
+    newNode->next = value.next;
+    return newNode;
+  }
+  node->next = _insertUser(node->next, value);
+  return node;
+}
+
+void insertUser(UserState value) {
+  state->first = _insertUser(state->first, value);
+}
+
+char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port) {
+  if (user == NULL)
+    return NULL;
+  if (strcmp(user->ip, ip) == 0)
+    return user->username;
+  return _getUsernameFromIpNPort(user->next, ip, port);
+}
+
+char * getUsernameFromIpNPort(char * ip, char * port) {
+  if (state == NULL)
+    return NULL;
+  return _getUsernameFromIpNPort(state->first, ip, port);
+}
+
+UserNode * _insertSeeder(UserNode * node, char * username) {
+  int cmp;
+  if (node == NULL || (cmp = strcmp(node->username, username) > 0)) {
+    // reached the end of the list or passed. Insert new node
+    UserNode * newNode = malloc(sizeof(UserNode));
+    strcpy(newNode->username, username);
+    newNode->next = node;
+    return newNode;
+  }
+  if (cmp < 0) {
+    node->next = _insertSeeder(node->next, username);
+  }
+  return node;
+}
+
+UserNode * insertSeeder(UserNode * first, char * ip, char * port) {
+  char * username = getUsernameFromIpNPort(ip, port);
+  return _insertSeeder(first, username);
+}
+
+FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port) {
+  int cmp;
+  if (node == NULL || (cmp = strcmp(node->file->MD5, hash)) > 0) {
+    // reached the end of the list or passed. Insert new node
+    FileList * newNode = malloc(sizeof(FileList));
+    newNode->file = malloc(sizeof(File));
+    newNode->next = node;
+    newNode->file->name = name;
+    newNode->file->size = atoi(bytes);
+    newNode->file->seeders = NULL;
+    newNode->file->leechers = NULL;
+    strcpy(newNode->file->MD5, hash);
+    newNode->file->seeders = insertSeeder(newNode->file->seeders, ip, port);
+    return newNode;
+  }
+  if (cmp == 0) {
+    // found the same element. Add a seeder
+    node->file->seeders = insertSeeder(node->file->seeders, ip, port);
+  }
+  if (cmp < 0) {
+    // still searching
+    node->next = _registerFile(node->next, name, bytes, hash, ip, port);
+  }
+  return node;
+}
+
+void registerFile(char * name, char * bytes, char * hash, char * ip, char * port) {
+  fileList->next = _registerFile(fileList->next, name, bytes, hash, ip, port);
+}
+
+void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
+  if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
     char * user = strtok(NULL, ":");
     char * password = strtok(NULL, "\n");
-    if (loginUser(user, password)) {
+    int loginState = 0;
+    if ((loginState = loginUser(user, password))) {
+      if (state == NULL)
+        state = malloc(sizeof(struct TrackerState));
+      UserState node = (UserState) {.ip = ipstr, .port = portstr, .next = NULL};
+      strcpy(node.username, user);
+      insertUser(node);
+      if (loginState == 1)
+        sendto(fd, "Logged in successfully\n", strlen("Logged in successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+      else
+        sendto(fd, "Registered successfully\n", strlen("Registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    } else {
+        sendto(fd, "Incorrect password for user\n", strlen("Incorrect password for user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     }
+  }
+  if (strcmp(cmd, "LIST") == 0) { // LIST files
+                                  // LIST peers <hash>
+    char * arg = strtok(NULL, "\n");
+    if (strcmp(arg, "files") == 0) {
+      // sendto fd files list
+    } else {
+      arg = strtok(NULL, " ");
+      if (strcmp(arg, "peers") == 0) {
+        arg = strtok(NULL, "\n");
+        // now arg has the hash of the file
+        
+      }
+    }
+  }
+  if (strcmp(cmd, "REGISTER") == 0) { // REGISTER <name> <bytes> <hash>
+    if (fileList == NULL)
+      fileList = malloc(sizeof(FileList));
+    char * name = strtok(NULL, " ");
+    char * bytes = strtok(NULL, " ");
+    char * hash = strtok(NULL, "\n");
+    registerFile(name, bytes, hash, ipstr, portstr);
   }
   
 }
@@ -149,9 +267,10 @@ void tracker_handler(struct selector_key * key) {
   char buffer[MAX_STRING_LENGTH];
   ssize_t bytesRecv = recvfrom(key->fd, buffer, MAX_STRING_LENGTH, 0, (struct sockaddr *) &client_addr, &client_addr_len);
   if (bytesRecv < 0) return;
-  
-  handleCmd(strtok(buffer, " "));
-  //sendto(key->fd, buffer, bytesRecv, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  char portstr[6] = {0};
+  char ipstr[16] = {0};
+  getnameinfo((struct sockaddr*)&client_addr, sizeof(struct sockaddr_storage), ipstr, sizeof(ipstr), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
+  handleCmd(strtok(buffer, " "), ipstr, portstr, key->fd, client_addr);
 }
 
 char * getUser(char* username, char* usersS) {
@@ -164,7 +283,7 @@ char * getUser(char* username, char* usersS) {
   return strstr(usersS, usernameComma);
 }
 
-bool loginUser(char * username, char * password) {
+int loginUser(char * username, char * password) {
   if (users == NULL) return false;
   fseek(users, 0L, SEEK_END);
   int usersStrLen = ftell(users);
@@ -174,7 +293,7 @@ bool loginUser(char * username, char * password) {
   char* user = getUser(username, usersStr);
   if (user == NULL) {
     registerUser(username, password);
-    return true;
+    return 2; // true but with a flag
   } else {
     strtok(user, ",");
     char * passwordStr = strtok(NULL, "\n");
