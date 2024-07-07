@@ -30,7 +30,7 @@ fileMap createMap() {
     return hashmap;
 }
 
-static unsigned int hash(unsigned char *key) {
+static unsigned int hash(char *key) {
     unsigned int hash_value = 0;
     for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
         hash_value = (hash_value << 5) + key[i];
@@ -38,7 +38,7 @@ static unsigned int hash(unsigned char *key) {
     return hash_value % TABLE_SIZE;
 }
 
-void insert(hashMap *map, unsigned char *key, FILE *value) {
+void insert(fileMap map, char *key, FILE *value) {
     unsigned int index = hash(key);
     Entry *new_entry = (Entry *)malloc(sizeof(Entry));
     memcpy(new_entry->key, key, MD5_SIZE);
@@ -47,7 +47,7 @@ void insert(hashMap *map, unsigned char *key, FILE *value) {
     map->table[index] = new_entry;
 }
 
-FILE *lookup(hashMap *map, unsigned char *key) {
+FILE *lookup(fileMap map, char *key) {
     unsigned int index = hash(key);
     Entry *entry = map->table[index];
     while (entry != NULL) {
@@ -59,7 +59,7 @@ FILE *lookup(hashMap *map, unsigned char *key) {
     return NULL;
 }
 
-int removeEntry(hashMap *hashmap, unsigned char *key) {
+int removeEntry(fileMap hashmap, char *key) {
     unsigned int index = hash(key);
     Entry *entry = hashmap->table[index];
     Entry *prev = NULL;
@@ -81,7 +81,7 @@ int removeEntry(hashMap *hashmap, unsigned char *key) {
     return 0;
 }
 
-void freeMap(hashMap *map) {
+void freeMap(fileMap map) {
     for (int i = 0; i < TABLE_SIZE; i++) {
         Entry *entry = map->table[i];
         while (entry != NULL) {

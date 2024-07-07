@@ -9,9 +9,9 @@ typedef struct hashMap* fileMap;
 
 
 fileMap createMap();
-void insert(fileMap map,unsigned char* key,FILE* value);
-FILE *lookup(fileMap map, unsigned char *key);
+void insert(fileMap map,char* key,FILE* value);
+FILE *lookup(fileMap map, char *key);
 void freeMap(fileMap map);
-int removeEntry(fileMap hashmap, unsigned char *key);
+int removeEntry(fileMap hashmap, char *key);
 
 #endif // !1
