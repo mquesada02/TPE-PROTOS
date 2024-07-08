@@ -40,7 +40,7 @@ static unsigned int hash(char *key) {
 
 void insert(fileMap map, char *key, FILE *value) {
     unsigned int index = hash(key);
-    Entry *new_entry = (Entry *)malloc(sizeof(Entry));
+    Entry *new_entry = malloc(sizeof(Entry));
     memcpy(new_entry->key, key, MD5_SIZE+1);
     new_entry->value = value;
     new_entry->next = map->table[index];
@@ -87,6 +87,7 @@ void freeMap(fileMap map) {
         while (entry != NULL) {
             Entry *temp = entry;
             entry = entry->next;
+            fclose(temp->value);
             free(temp);
         }
     }

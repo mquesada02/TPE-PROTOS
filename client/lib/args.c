@@ -58,11 +58,11 @@ static void usage(const char *progname) {
 void parse_args(const int argc, char **argv, struct tracker_args *args) {
     memset(args, 0, sizeof(*args)); // sobre todo para setear en null los punteros de users
 
-    args->leeker_socks_addr = "0.0.0.0";
-    args->leekerSocksPort = 2525;
+    args->leecherSocksAddr = "0.0.0.0";
+    args->leecherSocksPort = 2525;
 
     args->trackerSocksAddr = "127.0.0.1";
-    args->trackerSocksPort = 2526;
+    args->trackerSocksPort = 15555;
 
     args->mng_addr   = "127.0.0.1";
     args->mng_port   = 8080;
@@ -90,10 +90,10 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
                 usage(argv[0]);
                 break;
             case 'l':
-                args->leeker_socks_addr = optarg;
+                args->leecherSocksAddr = optarg;
                 break;
             case 'L':
-                args->leekerSocksPort = port(optarg);
+                args->leecherSocksPort = port(optarg);
                 break;
             case 'P':
                 args->mng_port   = port(optarg);
