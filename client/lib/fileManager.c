@@ -29,7 +29,17 @@ long copyFromFile(char* buffer,char* md5,long offset,long bytes){
     return 0;
 }
 
-long addFile(char* md5){
+long addFile(char* md5,char* filename){
+    FILE* file=lookup(map,md5);
+    if(file!=NULL)
+        return 1;
+    char pathname[PATH_SIZE];
+    sprintf(pathname,"%s/%s",REPO_PATH,filename);
+
+    file=fopen(pathname,"rb");
+    if(file==NULL)
+        return -1;
+    insert(map,md5,file);
     return 0;
 }
 
@@ -73,4 +83,8 @@ long initializeFileManager(){
         }
     }
     return 0;
+}
+
+void endFileManager(){
+    freeMap(map);
 }
