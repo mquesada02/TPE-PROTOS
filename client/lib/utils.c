@@ -14,7 +14,7 @@
 
 #define SUCCESS 1
 #define ERROR -1
-#define MD5_SIZE 32
+
 #define MAX_FILENAME 256
 
 #define MAX_ADDR_BUFFER 128
@@ -129,7 +129,8 @@ int setupLeekerSocket   (const char *service, const char **errmsg) {
 bool calculateMD5(char* filename, char md5Buffer[MD5_SIZE + 1]) {
     FILE *file = NULL;
 
-    char buff[strlen("md5sum ") + MAX_FILENAME] = "";
+    char buff[strlen("md5sum ") + MAX_FILENAME];
+    memset(buff,0,strlen("md5sum ") + MAX_FILENAME);
     strcat(buff, "md5sum ");
     strcat(buff, filename);
 
