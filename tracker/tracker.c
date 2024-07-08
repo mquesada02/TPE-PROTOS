@@ -25,7 +25,7 @@ struct TrackerState {
 };
 
 typedef struct File{
-    char* name;
+    char name[MAX_FILENAME];
     int size; //bytes
     char MD5[MD5_SIZE];
     UserNode * seeders;
@@ -194,7 +194,7 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
     FileList * newNode = malloc(sizeof(FileList));
     newNode->file = malloc(sizeof(File));
     newNode->next = node;
-    newNode->file->name = name;
+    strcpy(newNode->file->name, name);
     newNode->file->size = atoi(bytes);
     newNode->file->seeders = NULL;
     newNode->file->leechers = NULL;
@@ -206,7 +206,7 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
   if (cmp == 0) {
     // found the same element. Add a seeder
     node->file->seeders = insertSeeder(node->file->seeders, ip, port);
-    sendto(fd, "File registed successfully\n", strlen("File registed successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    sendto(fd, "File registered successfully\n", strlen("File registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
   }
   if (cmp < 0) {
     // still searching
