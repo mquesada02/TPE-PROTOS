@@ -8,13 +8,13 @@
 #include <errno.h>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <dirent.h>
-
 #include "../include/utils.h"
 #include "../include/fileMap.h"
 #define REPO_PATH "../repository"
 #define PATH_SIZE 1024
-
+#define DT_REG 8 //redefinido pues no es reconocido por alguna razon
 
 
 fileMap map;
@@ -31,6 +31,17 @@ int copyFromFile(char* buffer,char* md5,int offset,int bytes){
 
 int addFile(char* md5){
     return 0;
+}
+
+int getFileSize(char* md5){
+    FILE* file=lookup(map,md5);
+    if(file==NULL)
+        return -1;
+    int current=ftell(file);
+    fseek(file,0l,SEEK_END);
+    int size=ftell(file);
+    fseek(file,current,SEEK_SET);
+    return size;
 }
 
 int removeFile(char* md5){
@@ -50,13 +61,15 @@ int initializeFileManager(){
         return -2;
     }
     while((dirnt=readdir(dir))){
-        char md5Buffer[MD5_SIZE+1];
-        sprintf(pathname,"%s/%s",REPO_PATH,dirnt->d_name);
-        FILE* file=fopen(pathname,"rb");
-        calculateMD5(pathname,md5Buffer);
-        if(file!=NULL) {
-            insert(map, md5Buffer, file);
-            printf("%s\n", md5Buffer);
+        if(dirnt->d_type == DT_REG ){
+            char md5Buffer[MD5_SIZE+1];
+            sprintf(pathname,"%s/%s",REPO_PATH,dirnt->d_name);
+            FILE* file=fopen(pathname,"rb");
+            calculateMD5(pathname,md5Buffer);
+            if(file!=NULL) {
+                insert(map, md5Buffer, file);
+                printf("%s\n", md5Buffer);
+            }
         }
     }
     return 0;
