@@ -11,6 +11,9 @@
 #define INT_LEN 12
 #define QUANTUM 10
 
+#define IP_LEN 16
+#define PORT_LEN 6
+
 
 typedef struct UserNode{
     char username[MAX_USERNAME_SIZE];
@@ -21,8 +24,8 @@ typedef struct UserNode{
 
 typedef struct UserState {
   char username[MAX_USERNAME_SIZE];
-  char ip[16];
-  char port[6];
+  char ip[IP_LEN];
+  char port[PORT_LEN];
   struct UserState * next;
 } UserState;
 
@@ -313,8 +316,8 @@ void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr)
   if (seeder == NULL) {
     return;
   }
-  char ip[16] = {0};
-  char port[6] = {0};
+  char ip[IP_LEN] = {0};
+  char port[PORT_LEN] = {0};
   getIpNPortFromUsername(seeder->username, ip, port);
   char buffer[MAX_STRING_LENGTH];
   sprintf(buffer, "%s:%s\n",ip,port);
