@@ -15,8 +15,8 @@ typedef struct UserNode{
 
 typedef struct UserState {
   char username[MAX_USERNAME_SIZE];
-  char* ip;
-  char* port;
+  char ip[16];
+  char port[6];
   struct UserState * next;
 } UserState;
 
@@ -140,8 +140,8 @@ UserState * _insertUser(UserState * node, UserState value) {
   if (node == NULL) {
     UserState * newNode = malloc(sizeof(UserState));
     strcpy(newNode->username, value.username);
-    newNode->ip = value.ip;
-    newNode->port = value.port;
+    strcpy(newNode->ip, value.ip);
+    strcpy(newNode->port, value.port);
     newNode->next = value.next;
     return newNode;
   }
@@ -156,7 +156,7 @@ void insertUser(UserState value) {
 char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port) {
   if (user == NULL)
     return NULL;
-  if (strcmp(user->ip, ip) == 0)
+  if (strcmp(user->ip, ip) == 0 && strcmp(user->port, port) == 0)
     return user->username;
   return _getUsernameFromIpNPort(user->next, ip, port);
 }
@@ -169,7 +169,7 @@ char * getUsernameFromIpNPort(char * ip, char * port) {
 
 UserNode * _insertSeeder(UserNode * node, char * username) {
   int cmp;
-  if (node == NULL || (cmp = strcmp(node->username, username) > 0)) {
+  if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
     // reached the end of the list or passed. Insert new node
     UserNode * newNode = malloc(sizeof(UserNode));
     strcpy(newNode->username, username);
@@ -189,7 +189,7 @@ UserNode * insertSeeder(UserNode * first, char * ip, char * port) {
 
 FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
   int cmp;
-  if (node == NULL || (cmp = strcmp(node->file->MD5, hash)) > 0) {
+  if (node == NULL || (cmp = strcmp(hash,node->file->MD5)) > 0) {
     // reached the end of the list or passed. Insert new node
     FileList * newNode = malloc(sizeof(FileList));
     newNode->file = malloc(sizeof(File));
@@ -216,14 +216,13 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
 }
 
 void registerFile(char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
-  fileList = _registerFile(fileList->next, name, bytes, hash, ip, port, fd, client_addr);
+  fileList = _registerFile(fileList, name, bytes, hash, ip, port, fd, client_addr);
 }
 
 void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, char * port) {
-  int cmp;
-  if (userState == NULL || (cmp = strcmp(userState->username, username)) > 0)
+  if (userState == NULL )
     return; // not found
-  if (cmp == 0) {
+  if (strcmp(username, userState->username) == 0) {
     strcpy(ip, userState->ip);
     strcpy(port, userState->port);
     return;
@@ -239,8 +238,8 @@ void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr)
   if (seeder == NULL) {
     return;
   }
-  char ip[16];
-  char port[6];
+  char ip[16] = {0};
+  char port[6] = {0};
   getIpNPortFromUsername(seeder->username, ip, port);
   char buffer[MAX_STRING_LENGTH];
   sprintf(buffer, "%s:%s\n",ip,port);
@@ -250,7 +249,7 @@ void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr)
 
 void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage client_addr) {
   int cmp;
-  if (node == NULL || node->file == NULL || (cmp = strcmp(node->file->MD5, hash)) > 0) {
+  if (node == NULL || node->file == NULL || (cmp = strcmp(hash, node->file->MD5)) > 0) {
     sendto(fd, "No peers for this file\n", strlen("No peers for this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     return;
   }
@@ -269,8 +268,10 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
     if ((loginState = loginUser(user, password))) {
       if (state == NULL)
         state = malloc(sizeof(struct TrackerState));
-      UserState node = (UserState) {.ip = ipstr, .port = portstr, .next = NULL};
+      UserState node = (UserState) {.next = NULL};
       strcpy(node.username, user);
+      strcpy(node.ip, ipstr);
+      strcpy(node.port, portstr);
       insertUser(node);
       if (loginState == 1)
         sendto(fd, "Logged in successfully\n", strlen("Logged in successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
@@ -295,8 +296,6 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
     }
   }
   if (strcmp(cmd, "REGISTER") == 0) { // REGISTER <name> <bytes> <hash>
-    if (fileList == NULL)
-      fileList = malloc(sizeof(FileList));
     char * name = strtok(NULL, " ");
     char * bytes = strtok(NULL, " ");
     char * hash = strtok(NULL, "\n");
