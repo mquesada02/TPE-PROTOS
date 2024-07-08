@@ -20,7 +20,7 @@
 fileMap map;
 
 
-int copyFromFile(char* buffer,char* md5,int offset,int bytes){
+long copyFromFile(char* buffer,char* md5,long offset,long bytes){
     FILE* file=lookup(map,md5);
     if(file==NULL)
         return -1;
@@ -29,27 +29,27 @@ int copyFromFile(char* buffer,char* md5,int offset,int bytes){
     return 0;
 }
 
-int addFile(char* md5){
+long addFile(char* md5){
     return 0;
 }
 
-int getFileSize(char* md5){
+long getFileSize(char* md5){
     FILE* file=lookup(map,md5);
     if(file==NULL)
         return -1;
-    int current=ftell(file);
-    fseek(file,0l,SEEK_END);
-    int size=ftell(file);
+    long current=ftell(file);
+    fseek(file,0,SEEK_END);
+    long size=ftell(file);
     fseek(file,current,SEEK_SET);
     return size;
 }
 
-int removeFile(char* md5){
+long removeFile(char* md5){
     return removeEntry(map,md5);
 }
 
 
-int initializeFileManager(){
+long initializeFileManager(){
     map=createMap();
     if(map==NULL)
         return -1;

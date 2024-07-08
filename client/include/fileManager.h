@@ -4,10 +4,10 @@
 
 #define PACKET_SIZE 512
 
-int getFileSize(char* md5);
-int copyFromFile(char* buffer,char* md5,int offset,int bytes);
-int removeFile(char* md5);
-int initializeFileManager();
-int addFile(char* md5);
+long getFileSize(char* md5);
+long copyFromFile(char* buffer,char* md5,long offset,long bytes);
+long removeFile(char* md5);
+long initializeFileManager();
+long addFile(char* md5);
 
 #endif
