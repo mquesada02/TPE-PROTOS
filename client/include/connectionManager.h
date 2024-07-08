@@ -3,6 +3,10 @@
 
 #include "selector.h"
 
+int setupLeekerSocket(const char *service, const char **errmsg);
+
+int setupTrackerSocket(const char *ip, const char *port, const char **errmsg);
+
 void leekerHandler(struct selector_key *key);
 
 #endif //TPE_PROTOS_CONNECTIONMANAGER_H

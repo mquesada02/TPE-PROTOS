@@ -2,6 +2,8 @@
 #include "include/selector.h"
 #include "include/utils.h"
 #include "include/connectionManager.h"
+#include "include/display.h"
+#include "include/fileManager.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,16 +40,18 @@ int main(int argc,char ** argv){
 
     parse_args(argc, argv, &args);
 
+    initializeFileManager();
+
     const char       *err_msg = NULL;
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
 
-    /*
+/*
     char trackerPortStr[6];
     sprintf(trackerPortStr, "%d",args.trackerSocksPort);
-    int trackerSocket = setupTrackerSocket(trackerPortStr, &err_msg);
+    int trackerSocket = setupTrackerSocket(args.trackerSocksAddr, trackerPortStr, &err_msg);
     if (trackerSocket < 0) goto finally;
-    */
+*/
 
     char peerPortStr[6];
     sprintf(peerPortStr, "%d",args.leekerSocksPort);
@@ -76,24 +80,36 @@ int main(int argc,char ** argv){
         goto finally;
     }
 
-    /*const struct fd_handler tracker = {
-            .handle_read = tracker_handler,
-            .handle_write = NULL,
+    const struct fd_handler input = {
+            .handle_read = handleInput,
+            .handle_write = NULL, //trackerHandler,
             .handle_close = NULL,
-    };*/
-
+    };
+/*
+    const struct fd_handler tracker = {
+            .handle_read = NULL,
+            .handle_write = NULL, //trackerHandler,
+            .handle_close = NULL,
+    };
+*/
     const struct fd_handler leeker = {
             .handle_read = leekerHandler,
             .handle_write = NULL,
             .handle_close = NULL,
     };
 
-    /*ss = selector_register(selector, trackerSocket, &tracker, OP_READ, NULL);
+    ss = selector_register(selector, STDIN_FILENO, &input, OP_READ, NULL);
     if (ss != SELECTOR_SUCCESS) {
         err_msg = "Unable to register FD for IPv4/IPv6.";
         goto finally;
-    }*/
-
+    }
+/*
+    ss = selector_register(selector, trackerSocket, &tracker, OP_WRITE, NULL);
+    if (ss != SELECTOR_SUCCESS) {
+        err_msg = "Unable to register FD for IPv4/IPv6.";
+        goto finally;
+    }
+*/
     ss = selector_register(selector, leekerSocket, &leeker, OP_READ, NULL);
     if (ss != SELECTOR_SUCCESS) {
         err_msg = "Unable to register FD for IPv4/IPv6.";
@@ -121,12 +137,13 @@ int main(int argc,char ** argv){
     if (selector != NULL)
         selector_destroy(selector);
     selector_close();
-    /*
+/*
     if (trackerSocket >= 0)
         close(trackerSocket);
-    */
+*/
     if (leekerSocket >= 0)
         close(leekerSocket);
+    //TODO cerrar los sockets de los leekers
     return 0;
 }
 

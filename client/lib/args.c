@@ -61,6 +61,9 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
     args->leeker_socks_addr = "0.0.0.0";
     args->leekerSocksPort = 2525;
 
+    args->trackerSocksAddr = "127.0.0.1";
+    args->trackerSocksPort = 2526;
+
     args->mng_addr   = "127.0.0.1";
     args->mng_port   = 8080;
 
@@ -78,7 +81,7 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
             { 0,           0,                 0, 0 }
         };
 
-        c = getopt_long(argc, argv, "hl:P:u:v", long_options, &option_index);
+        c = getopt_long(argc, argv, "hl:L:P:u:v", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -88,6 +91,9 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
                 break;
             case 'l':
                 args->leeker_socks_addr = optarg;
+                break;
+            case 'L':
+                args->leekerSocksPort = port(optarg);
                 break;
             case 'P':
                 args->mng_port   = port(optarg);
