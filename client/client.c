@@ -2,7 +2,7 @@
 #include "include/selector.h"
 #include "include/utils.h"
 #include "include/connectionManager.h"
-#include "include/display.h"
+#include "include/user.h"
 #include "include/fileManager.h"
 
 #include <stdio.h>
