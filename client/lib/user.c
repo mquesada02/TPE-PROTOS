@@ -2,17 +2,20 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <stdlib.h>
 
 #include "../include/user.h"
 #include "../include/selector.h"
+#include "../include/utils.h"
+#include "../include/connectionManager.h"
 
 #define INPUT_SIZE 256
 
 #define LOGIN "PLAIN"
-
+#define FILES "LIST"
 #define SEND '\n'
 
-#define ATTACHMENT(key) ( (struct Tracker *) (key)->data)
+#define LEECH(key) ( (struct Tracker *) (key)->data)
 
 #define PARAMS int argc, char *argv[], struct selector_key *key
 
@@ -69,6 +72,16 @@ void handleInput(struct selector_key *key) {
     parseCommand(inputBuffer, key);
 }
 
+size_t sendMessage(struct selector_key * key, char * msg, size_t size) {
+    return sendto(LEECH(key)->socket, msg, size, 0, (struct sockaddr *)LEECH(key)->trackerAddr, sizeof(struct sockaddr_in));
+}
+
+size_t receiveMessage(struct selector_key * key, char * buff, size_t len) {
+    return recvfrom(LEECH(key)->socket, buff, len, 0,
+                    (struct sockaddr *)LEECH(key)->trackerAddr,
+                    (socklen_t *) sizeof(struct sockaddr_in));
+}
+
 void loginHandler(PARAMS) {
     if (argc != 3) {
         printf("Invalid parameter amount\n");
@@ -77,23 +90,56 @@ void loginHandler(PARAMS) {
     size_t requestSize = 256;
     char requestBuff[requestSize];
 
-    requestBuff[requestSize - 1] = '\0';
+    //char hash[33];
 
     snprintf(requestBuff, requestSize - 1, "%s %s:%s%c", LOGIN, argv[1], argv[2], SEND);
-    printf("%s", requestBuff);
-    sendto(ATTACHMENT(key)->socket, requestBuff, strlen(requestBuff), 0, (struct sockaddr *)ATTACHMENT(key)->trackerAddr, sizeof(struct sockaddr_in));
+
+    sendMessage(key, requestBuff, requestSize - 1);
+
+    size_t responseSize = 256;
+    char responseBuff[responseSize];
+
+    if(receiveMessage(key, responseBuff, responseSize - 1) == 0) {
+        printf("Connection unavailable\n");
+        return;
+    }
+
+    printf("%s", responseBuff);
+
 }
 
 void filesHandler(PARAMS) {
-    printf("filesHandler called with %d arguments\n", argc - 1);
-    for (int i = 1; i < argc; i++) {
-        printf("arg[%d]: %s\n", i - 1, argv[i]);
+    if(argc != 1) {
+        printf("Invalid parameter amount\n");
     }
+
+    size_t requestSize = 256;
+    char requestBuff[requestSize];
+    snprintf(requestBuff, requestSize - 1, "%s%c", FILES, SEND);
+
+    sendMessage(key, requestBuff, requestSize - 1);
+
+    size_t responseSize = 256;
+    char responseBuff[responseSize];
+
+    if(receiveMessage(key, responseBuff, responseSize - 1) == 0) {
+        printf("Connection unavailable\n");
+        return;
+    }
+
+    printf("%s", responseBuff);
 }
 
 void downloadHandler(PARAMS) {
-    printf("downloadHandler called with %d arguments\n", argc - 1);
-    for (int i = 1; i < argc; i++) {
-        printf("arg[%d]: %s\n", i - 1, argv[i]);
+    if(argc != 4) {
+        printf("Invalid parameter amount\n");
     }
+
+    struct peerMng* p1 = addPeer(key, argv[1], argv[2]);
+    struct peerMng* p2 = addPeer(key, argv[1], argv[2]);
+    struct peerMng* p3 = addPeer(key, argv[1], argv[2]);
+
+    requestFromPeer(p1, argv[3], 0, 5);
+    requestFromPeer(p2, argv[3], 6, 10);
+    requestFromPeer(p3, argv[3], 10, 9999);
 }

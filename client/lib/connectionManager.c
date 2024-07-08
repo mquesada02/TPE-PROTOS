@@ -7,12 +7,13 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 #include "../include/selector.h"
 #include "../include/user.h"
 #include "../include/fileManager.h"
+#include "../include/connectionManager.h"
 
-#define REQUEST_BUFFER_SIZE 256
 #define SUCCESS 1
 #define ERROR (-1)
 
@@ -23,14 +24,16 @@
 
 static char addrBuffer[MAX_ADDR_BUFFER];
 
-#define ATTACHMENT(key) ( (struct leekerMng *)(key)->data)
+#define LEECH(key) ( (struct leecherMng *)(key)->data)
+#define PEER(key) ( (struct peerMng *)(key)->data)
 
-void leekerRead(struct selector_key *key);
-void leekerWrite(struct selector_key *key);
-void leekerClose(struct selector_key *key);
-void leekerBlock(struct selector_key *key);
+void leecherRead(struct selector_key *key);
+//void leecherWrite(struct selector_key *key);
+void peerRead(struct selector_key *key);
+void peerWrite(struct selector_key *key);
 
-struct leekerMng {
+
+struct leecherMng {
 
     char requestBuffer[REQUEST_BUFFER_SIZE];
 
@@ -38,9 +41,16 @@ struct leekerMng {
 
 };
 
-static const struct fd_handler leekersHandler = {
-        .handle_read   = leekerRead,
+static const struct fd_handler leechersHandler = {
+        .handle_read   = leecherRead,
         .handle_write  = NULL,
+        .handle_close  = NULL,
+        .handle_block  = NULL,
+};
+
+static const struct fd_handler peerHandler = {
+        .handle_read = peerRead,
+        .handle_write = peerWrite,
         .handle_close  = NULL,
         .handle_block  = NULL,
 };
@@ -103,7 +113,7 @@ int printSocketAddress(const struct sockaddr *address, char *addrBuffer) {
     return 1;
 }
 
-int setupLeekerSocket(const char *service, const char **errmsg) {
+int setupLeecherSocket(const char *service, const char **errmsg) {
     // Construct the server address structure
     struct addrinfo addrCriteria;                   // Criteria for address match
     memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
@@ -149,11 +159,11 @@ int setupLeekerSocket(const char *service, const char **errmsg) {
     return servSock;
 }
 
-void leekerHandler(struct selector_key *key) {
+void leecherHandler(struct selector_key *key) {
 
     struct sockaddr_storage leekerAddr;
     socklen_t leekerAddrLen = sizeof(leekerAddr);
-    struct leekerMng * mng = NULL;
+    struct leecherMng * mng = NULL;
 
     const int leeker = accept(key->fd, (struct sockaddr*) &leekerAddr, &leekerAddrLen);
     if(leeker == -1) {
@@ -163,7 +173,7 @@ void leekerHandler(struct selector_key *key) {
         goto fail;
     }
 
-    mng = malloc(sizeof(struct leekerMng));
+    mng = malloc(sizeof(struct leecherMng));
 
     if(mng == NULL) {
         goto fail;
@@ -172,14 +182,18 @@ void leekerHandler(struct selector_key *key) {
     memset(mng, 0, sizeof(*mng));
 
 
-    if(SELECTOR_SUCCESS != selector_register(key->s, leeker, &leekersHandler, OP_READ, mng)) {
+    if(SELECTOR_SUCCESS != selector_register(key->s, leeker, &leechersHandler, OP_READ, mng)) {
         goto fail;
     }
 
     return;
+
     fail:
     if(leeker != -1) {
         close(leeker);
+    }
+    if(mng != NULL) {
+        free(mng);
     }
 }
 
@@ -190,11 +204,11 @@ static void quit(struct selector_key *key) {
 }
 
 
-void leekerRead(struct selector_key *key) {
+void leecherRead(struct selector_key *key) {
 
-    memset(ATTACHMENT(key)->requestBuffer, 0, REQUEST_BUFFER_SIZE);
+    memset(LEECH(key)->requestBuffer, 0, REQUEST_BUFFER_SIZE);
 
-    ssize_t bytes = recv(key->fd, ATTACHMENT(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
+    ssize_t bytes = recv(key->fd, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
 
     if(bytes == 0) {
         quit(key);
@@ -207,7 +221,7 @@ void leekerRead(struct selector_key *key) {
     char tempByteTo[256];
 
     // Split the received string
-    char *token = strtok(ATTACHMENT(key)->requestBuffer, ":");
+    char *token = strtok(LEECH(key)->requestBuffer, ":");
     if (token == NULL)
         goto error;
     strcpy(hash, token);
@@ -237,18 +251,16 @@ void leekerRead(struct selector_key *key) {
     if (size <= 1)
         goto error;
 
-    ATTACHMENT(key)->responseBuffer = malloc(size + 1);
+    LEECH(key)->responseBuffer = malloc(size + 1);
 
-    copyFromFile(ATTACHMENT(key)->responseBuffer, hash, byteFrom, size);
+    copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size);
 
-    ssize_t sent_bytes = send(key->fd, ATTACHMENT(key)->responseBuffer, size, 0);
+    ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, size, 0);
     if (sent_bytes <= 0) {
         goto error;
     }
 
-    printf("%s\n", ATTACHMENT(key)->responseBuffer);
-
-    free(ATTACHMENT(key)->responseBuffer);
+    free(LEECH(key)->responseBuffer);
     return;
 
     error:
@@ -296,4 +308,155 @@ struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char
     tracker->socket = sock;
 
     return tracker;
+}
+
+struct peerMng *initializePeerMng() {
+    struct peerMng *peer = malloc(sizeof(struct peerMng));
+    if (peer == NULL) {
+        perror("Failed to allocate memory for peerMng");
+        return NULL;
+    }
+
+    peer->writeReady = false;
+    peer->readReady = false;
+    peer->responseBuffer = NULL;
+
+    if (pthread_mutex_init(&peer->mutex, NULL) != 0) {
+        perror("Failed to initialize mutex");
+        free(peer);
+        return NULL;
+    }
+
+    return peer;
+}
+
+void cleanupPeerMng(struct peerMng *peer) {
+    if (peer != NULL) {
+        pthread_mutex_destroy(&peer->mutex);
+        if (peer->responseBuffer != NULL) {
+            free(peer->responseBuffer);
+        }
+        free(peer);
+    }
+}
+
+int setupPeerSocket(const char *ip, const char *port) {
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (sock == -1) {
+        return -1;
+    }
+
+    struct sockaddr_in serv_addr;
+    memset(&serv_addr, 0, sizeof(serv_addr));
+
+    int port_i = atoi(port);
+
+    if (inet_pton(AF_INET, ip, &serv_addr.sin_addr) == -1) {
+        close(sock);
+        return -1;
+    }
+    serv_addr.sin_port = htons(port_i);
+    serv_addr.sin_family = AF_INET;
+
+    if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1) {
+        close(sock);
+        return -1;
+    }
+
+    return sock;
+
+}
+
+
+struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
+    int socket = 0;
+    socket = setupPeerSocket(ip, port);
+
+    struct peerMng * mng = NULL;
+
+    mng = initializePeerMng();
+
+    if(mng == NULL)
+        goto fail;
+
+    if(SELECTOR_SUCCESS != selector_register(key->s, socket, &peerHandler, OP_WRITE, mng)) {
+        goto fail;
+    }
+
+    return mng;
+
+    fail:
+    if(socket >= 0) {
+        close(socket);
+    }
+    if(mng != NULL) {
+        cleanupPeerMng(mng);
+    }
+    return NULL;
+}
+
+void peerRead(struct selector_key *key) {
+    pthread_mutex_lock(&PEER(key)->mutex);
+
+    ssize_t bytes = recv(key->fd, PEER(key)->responseBuffer, PEER(key)->responseBufferSize, 0);
+
+    if (bytes >= 0) {
+        PEER(key)->readReady = true;
+        printf("%s", PEER(key)->responseBuffer);
+    } else {
+        //TODO handle this
+        pthread_mutex_unlock(&PEER(key)->mutex);
+        return;
+    }
+
+    pthread_mutex_unlock(&PEER(key)->mutex);
+    selector_set_interest(key->s, key->fd, OP_WRITE);
+}
+
+void peerWrite(struct selector_key *key) {
+    pthread_mutex_lock(&PEER(key)->mutex);
+
+    if (!PEER(key)->writeReady) {
+        pthread_mutex_unlock(&PEER(key)->mutex);
+        return;
+    }
+
+    ssize_t bytes = send(key->fd, PEER(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
+
+    if (bytes <= 0) {
+        //TODO handle this
+        pthread_mutex_unlock(&PEER(key)->mutex);
+        return;
+    }
+
+    PEER(key)->writeReady = false;
+
+    pthread_mutex_unlock(&PEER(key)->mutex);
+    selector_set_interest(key->s, key->fd, OP_READ);
+}
+
+void requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t byteTo) {
+    if (byteTo <= byteFrom + 1) {
+        return;
+    }
+
+    pthread_mutex_lock(&peer->mutex);
+
+    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%d:%d", hash, (int)byteFrom, (int)byteTo);
+
+
+    if (peer->responseBuffer != NULL) {
+        free(peer->responseBuffer);
+        peer->responseBufferSize = 0;
+        peer->responseBuffer = NULL;
+    }
+
+    peer->responseBuffer = malloc(sizeof(char) * (byteTo - byteFrom));
+    peer->responseBufferSize = byteTo - byteFrom;
+
+    peer->writeReady = true;
+
+    pthread_mutex_unlock(&peer->mutex);
 }

@@ -50,8 +50,8 @@ int main(int argc,char ** argv){
     sprintf(trackerPortStr, "%d",args.trackerSocksPort);
 
     char peerPortStr[6];
-    sprintf(peerPortStr, "%d",args.leekerSocksPort);
-    int leekerSocket = setupLeekerSocket(peerPortStr, &err_msg);
+    sprintf(peerPortStr, "%d",args.leecherSocksPort);
+    int leekerSocket = setupLeecherSocket(peerPortStr, &err_msg);
     if (leekerSocket < 0) goto finally;
 
     signal(SIGTERM, sigterm_handler);
@@ -87,7 +87,7 @@ int main(int argc,char ** argv){
     };
 
     const struct fd_handler leeker = {
-            .handle_read = leekerHandler,
+            .handle_read = leecherHandler,
             .handle_write = NULL,
             .handle_close = NULL,
     };
