@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 
 #include "../include/selector.h"
+#include "../include/user.h"
 #include "../include/fileManager.h"
 
 #define REQUEST_BUFFER_SIZE 256
@@ -255,30 +256,44 @@ void leekerRead(struct selector_key *key) {
     printf("Roto todo\n");
 }
 
-int setupTrackerSocket(const char *ip, const char *port, const char **errmsg) {
-
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (sock == -1) {
-        return ERROR;
-    }
+struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char **errmsg) {
 
     struct sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
 
-    int port_i = atoi(port);
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock == -1) {
+        *errmsg = "Failed to create socket";
+        return NULL;
+    }
 
+    int port_i = atoi(port);
     if (inet_pton(AF_INET, ip, &serv_addr.sin_addr) == -1) {
         close(sock);
-        return ERROR;
+        *errmsg = "Invalid IP address";
+        return NULL;
     }
+
     serv_addr.sin_port = htons(port_i);
     serv_addr.sin_family = AF_INET;
 
-    if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1) {
+    struct Tracker *tracker = malloc(sizeof(struct Tracker));
+    if (tracker == NULL) {
         close(sock);
-        return ERROR;
+        *errmsg = "Memory allocation failed";
+        return NULL;
     }
 
-    return sock;
+    tracker->trackerAddr = malloc(sizeof(struct sockaddr_in));
+    if (tracker->trackerAddr == NULL) {
+        free(tracker);
+        close(sock);
+        *errmsg = "Memory allocation failed";
+        return NULL;
+    }
+
+    memcpy(tracker->trackerAddr, &serv_addr, sizeof(struct sockaddr_in));
+    tracker->socket = sock;
+
+    return tracker;
 }

@@ -5,7 +5,7 @@
 
 int setupLeekerSocket(const char *service, const char **errmsg);
 
-int setupTrackerSocket(const char *ip, const char *port, const char **errmsg);
+struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char **errmsg);
 
 void leekerHandler(struct selector_key *key);
 
