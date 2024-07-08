@@ -271,6 +271,19 @@ void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr) 
   sendFiles(fd, fileList->next, client_addr);
 }
 
+bool _checkIpNPort(UserState * node, char * ip, char * port) {
+  if (node == NULL)
+    return false;
+  if (strcmp(node->ip, ip) == 0 && strcmp(node->port, port) == 0) {
+    return true;
+  }
+  return _checkIpNPort(node->next, ip, port);
+}
+
+bool checkIpNPort(char * ip, char * port) {
+  return _checkIpNPort(state->first, ip, port);
+}
+
 void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
   if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
     char * user = strtok(NULL, ":");
@@ -313,7 +326,14 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
     char * hash = strtok(NULL, "\n");
     registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
   }
-  
+  if (strcmp(cmd, "CHECK") == 0) {
+    char * ip = strtok(NULL, ":");
+    char * port = strtok(NULL, "\n");
+    if (checkIpNPort(ip, port))
+      sendto(fd, "User is available\n", strlen("User is available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    else
+      sendto(fd, "User is unavailable\n", strlen("User is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  }
 }
 
 void tracker_handler(struct selector_key * key) {
