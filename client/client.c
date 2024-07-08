@@ -3,6 +3,7 @@
 #include "include/utils.h"
 #include "include/connectionManager.h"
 #include "include/display.h"
+#include "include/fileManager.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +39,8 @@ int main(int argc,char ** argv){
     args.trackerSocksPort = port;
 
     parse_args(argc, argv, &args);
+
+    initializeFileManager();
 
     const char       *err_msg = NULL;
     selector_status   ss      = SELECTOR_SUCCESS;
@@ -140,6 +143,7 @@ int main(int argc,char ** argv){
 */
     if (leekerSocket >= 0)
         close(leekerSocket);
+    //TODO cerrar los sockets de los leekers
     return 0;
 }
 

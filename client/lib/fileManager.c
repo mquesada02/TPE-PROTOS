@@ -54,8 +54,10 @@ int initializeFileManager(){
         sprintf(pathname,"%s/%s",REPO_PATH,dirnt->d_name);
         FILE* file=fopen(pathname,"rb");
         calculateMD5(pathname,md5Buffer);
-        if(file!=NULL)
-            insert(map,md5Buffer,file);
+        if(file!=NULL) {
+            insert(map, md5Buffer, file);
+            printf("%s\n", md5Buffer);
+        }
     }
     return 0;
 }

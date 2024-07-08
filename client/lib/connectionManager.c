@@ -9,10 +9,13 @@
 #include <arpa/inet.h>
 
 #include "../include/selector.h"
+#include "../include/fileManager.h"
 
 #define REQUEST_BUFFER_SIZE 256
 #define SUCCESS 1
 #define ERROR (-1)
+
+#define CLOSE_MSG "Closing"
 
 #define MAX_ADDR_BUFFER 128
 #define MAXPENDING 32
@@ -180,6 +183,7 @@ void leekerHandler(struct selector_key *key) {
 }
 
 static void quit(struct selector_key *key) {
+    send(key->fd, CLOSE_MSG, strlen(CLOSE_MSG), 0);
     close(key->fd);
     selector_unregister_fd(key->s, key->fd);
 }
@@ -229,21 +233,25 @@ void leekerRead(struct selector_key *key) {
 
     int size = byteTo - byteFrom;
 
-    if (size <= 0)
+    if (size <= 1)
         goto error;
 
     ATTACHMENT(key)->responseBuffer = malloc(size + 1);
 
-    //getPacket(ATTACHMENT(key)->responseBuffer, hash, byteFrom, size);
-    //send(...)
+    copyFromFile(ATTACHMENT(key)->responseBuffer, hash, byteFrom, size);
 
-    printf("%s, %d, %d\n", hash, byteFrom, size);
+    ssize_t sent_bytes = send(key->fd, ATTACHMENT(key)->responseBuffer, size, 0);
+    if (sent_bytes <= 0) {
+        goto error;
+    }
+
+    printf("%s\n", ATTACHMENT(key)->responseBuffer);
 
     free(ATTACHMENT(key)->responseBuffer);
     return;
 
     error:
-    //TODO limpiar todo si falla
+    quit(key);
     printf("Roto todo\n");
 }
 
