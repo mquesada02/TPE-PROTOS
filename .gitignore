@@ -5,3 +5,4 @@ CMakeLists.txt
 cmake-build-debug
 .idea
 client/client
+tracker/tracker

@@ -1,12 +1,12 @@
 #include "include/tracker.h"
-#include <openssl/md5.h>
-
 
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
 #define MD5_SIZE 32
 #define MAX_USERNAME_SIZE 32
 #define MAX_STRING_LENGTH 512
+#define MAX_FILENAME 256
+#define INT_LEN 12
 
 typedef struct UserNode{
     char username[MAX_USERNAME_SIZE];
@@ -187,7 +187,7 @@ UserNode * insertSeeder(UserNode * first, char * ip, char * port) {
   return _insertSeeder(first, username);
 }
 
-FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port) {
+FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
   int cmp;
   if (node == NULL || (cmp = strcmp(node->file->MD5, hash)) > 0) {
     // reached the end of the list or passed. Insert new node
@@ -200,21 +200,76 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
     newNode->file->leechers = NULL;
     strcpy(newNode->file->MD5, hash);
     newNode->file->seeders = insertSeeder(newNode->file->seeders, ip, port);
+    sendto(fd, "You are the first to register this file\n", strlen("You are the first to register this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     return newNode;
   }
   if (cmp == 0) {
     // found the same element. Add a seeder
     node->file->seeders = insertSeeder(node->file->seeders, ip, port);
+    sendto(fd, "File registed successfully\n", strlen("File registed successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
   }
   if (cmp < 0) {
     // still searching
-    node->next = _registerFile(node->next, name, bytes, hash, ip, port);
+    node->next = _registerFile(node->next, name, bytes, hash, ip, port, fd, client_addr);
   }
   return node;
 }
 
-void registerFile(char * name, char * bytes, char * hash, char * ip, char * port) {
-  fileList->next = _registerFile(fileList->next, name, bytes, hash, ip, port);
+void registerFile(char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
+  fileList = _registerFile(fileList->next, name, bytes, hash, ip, port, fd, client_addr);
+}
+
+void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, char * port) {
+  int cmp;
+  if (userState == NULL || (cmp = strcmp(userState->username, username)) > 0)
+    return; // not found
+  if (cmp == 0) {
+    strcpy(ip, userState->ip);
+    strcpy(port, userState->port);
+    return;
+  }
+  _getIpNPortFromUsername(userState->next, username, ip, port);
+}
+
+void getIpNPortFromUsername(char * username, char * ip, char * port) {
+  _getIpNPortFromUsername(state->first, username, ip, port);
+}
+
+void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr) {
+  if (seeder == NULL) {
+    return;
+  }
+  char ip[16];
+  char port[6];
+  getIpNPortFromUsername(seeder->username, ip, port);
+  char buffer[MAX_STRING_LENGTH];
+  sprintf(buffer, "%s:%s\n",ip,port);
+  sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  sendSeeders(seeder->next, fd, client_addr);
+}
+
+void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage client_addr) {
+  int cmp;
+  if (node == NULL || node->file == NULL || (cmp = strcmp(node->file->MD5, hash)) > 0) {
+    sendto(fd, "No peers for this file\n", strlen("No peers for this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    return;
+  }
+  if (cmp == 0) {
+    sendSeeders(node->file->seeders, fd, client_addr);
+    return;
+  }
+  sendPeers(node->next, fd, hash, client_addr);
+}
+
+void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr) {
+  if(fileList == NULL) return;
+
+  char buff[strlen(fileList->file->name) + INT_LEN + MD5_SIZE + 8];
+  int len = sprintf(buff, "%s - %d - %s\n", fileList->file->name, fileList->file->size, fileList->file->MD5);
+
+  sendto(fd, buff, len, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+
+  sendFiles(fd, fileList->next, client_addr);
 }
 
 void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
@@ -240,13 +295,14 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
                                   // LIST peers <hash>
     char * arg = strtok(NULL, "\n");
     if (strcmp(arg, "files") == 0) {
-      // sendto fd files list
+      FileList* fl = fileList;
+      sendFiles(fd, fl, client_addr);
     } else {
-      arg = strtok(NULL, " ");
+      arg = strtok(arg, " ");
       if (strcmp(arg, "peers") == 0) {
         arg = strtok(NULL, "\n");
         // now arg has the hash of the file
-        
+        sendPeers(fileList, fd, arg, client_addr);
       }
     }
   }
@@ -256,7 +312,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
     char * name = strtok(NULL, " ");
     char * bytes = strtok(NULL, " ");
     char * hash = strtok(NULL, "\n");
-    registerFile(name, bytes, hash, ipstr, portstr);
+    registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
   }
   
 }
@@ -308,33 +364,4 @@ void registerUser(char * username, char * password) {
   sprintf(buffer, "%s,%s\n",username,password);
   fputs(buffer, users);
   fflush(users);
-}
-
-bool calculateMD5(char* filename, char md5Buffer[MD5_SIZE + 1]) {
-  FILE *file = fopen(filename, "rb");
-  if (file == NULL) {
-    perror("Error opening file");
-    return false;
-  }
-
-  MD5_CTX md5Context;
-  MD5_Init(&md5Context);
-
-  unsigned char data[1024];
-  size_t bytesRead;
-  while ((bytesRead = fread(data, 1, sizeof(data), file)) != 0) {
-    MD5_Update(&md5Context, data, bytesRead);
-  }
-
-  unsigned char hash[MD5_DIGEST_LENGTH];
-  MD5_Final(hash, &md5Context);
-
-  fclose(file);
-
-  for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-    snprintf(&md5Buffer[i * 2], 3, "%02x", hash[i]);
-  }
-  md5Buffer[MD5_SIZE] = '\0';
-
-  return true;
 }
