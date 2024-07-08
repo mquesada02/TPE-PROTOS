@@ -15,7 +15,7 @@ struct tracker_args {
 
     char *          log_file;
 
-    char           *tracker_socks_addr;
+    char           *trackerSocksAddr;
     unsigned short  trackerSocksPort;
 
     char           *leeker_socks_addr;
