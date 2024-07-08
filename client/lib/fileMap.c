@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <openssl/md5.h>
+
+#include "../include/utils.h"
 #include "../include/fileMap.h"
 
-#define MD5_SIZE 129
 #define TABLE_SIZE 100
 
 typedef struct Entry {
-    unsigned char key[MD5_SIZE];
+    unsigned char key[MD5_SIZE+1];
     FILE *value;
     struct Entry *next;
 } Entry;
@@ -31,17 +31,17 @@ fileMap createMap() {
 }
 
 static unsigned int hash(char *key) {
-    unsigned int hash_value = 0;
-    for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-        hash_value = (hash_value << 5) + key[i];
+    unsigned int hashValue = 0;
+    for (int i = 0; i < MD5_SIZE; i++) {
+        hashValue = (hashValue << 5) + key[i];
     }
-    return hash_value % TABLE_SIZE;
+    return hashValue % TABLE_SIZE;
 }
 
 void insert(fileMap map, char *key, FILE *value) {
     unsigned int index = hash(key);
     Entry *new_entry = (Entry *)malloc(sizeof(Entry));
-    memcpy(new_entry->key, key, MD5_SIZE);
+    memcpy(new_entry->key, key, MD5_SIZE+1);
     new_entry->value = value;
     new_entry->next = map->table[index];
     map->table[index] = new_entry;
@@ -65,7 +65,7 @@ int removeEntry(fileMap hashmap, char *key) {
     Entry *prev = NULL;
 
     while (entry != NULL) {
-        if (memcmp(entry->key, key, MD5_DIGEST_LENGTH) == 0) {
+        if (memcmp(entry->key, key, MD5_SIZE) == 0) {
             if (prev == NULL) {
                 hashmap->table[index] = entry->next;
             } else {
