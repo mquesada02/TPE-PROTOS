@@ -30,7 +30,7 @@ int copyFromFile(char* buffer,char* md5,int offset,int bytes){
 }
 
 int addFile(char* md5){
-
+    return 0;
 }
 
 int removeFile(char* md5){
