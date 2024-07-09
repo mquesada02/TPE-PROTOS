@@ -224,12 +224,12 @@ void downloadHandler(PARAMS) {
     }
 
     //TODO pedir el tamaño del archivo del tracker, pedir los peers y armarlos
+    strncpy(fileHash, argv[3], 32);
 
-    initFileBuffer("esto_es_de_manu", 380000);
+    initFileBuffer("esto_es_de_manu", getFileSize(fileHash));
 
 
     downloading = true;
-    strncpy(fileHash, argv[3], 32);
 
     struct peerMng* p1 = addPeer(key, argv[1], argv[2]);
 

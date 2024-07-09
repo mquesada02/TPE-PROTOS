@@ -246,7 +246,7 @@ void leecherRead(struct selector_key *key) {
     int byteFrom = atoi(tempByteFrom);
     int byteTo = atoi(tempByteTo);
 
-    int size = byteTo - byteFrom;
+    long size = byteTo - byteFrom;
 
     if (size <= 1)
         goto error;
@@ -319,7 +319,7 @@ struct peerMng *initializePeerMng() {
 
     peer->writeReady = false;
     peer->readReady = false;
-    peer->responseBuffer = NULL;
+    memset(peer->responseBuffer,0,sizeof(peer->responseBuffer));
     peer->killFlag = false;
 
     if (pthread_mutex_init(&peer->mutex, NULL) != 0) {
@@ -395,7 +395,7 @@ struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
 }
 
 void peerRead(struct selector_key *key) {
-    //pthread_mutex_lock(&PEER(key)->mutex);
+    pthread_mutex_lock(&PEER(key)->mutex);
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
@@ -413,12 +413,12 @@ void peerRead(struct selector_key *key) {
         return;
     }
 
-    //pthread_mutex_unlock(&PEER(key)->mutex);
+    pthread_mutex_unlock(&PEER(key)->mutex);
     selector_set_interest(key->s, key->fd, OP_WRITE);
 }
 
 void peerWrite(struct selector_key *key) {
-    //pthread_mutex_lock(&PEER(key)->mutex);
+    pthread_mutex_lock(&PEER(key)->mutex);
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
@@ -444,7 +444,7 @@ void peerWrite(struct selector_key *key) {
 
     PEER(key)->writeReady = false;
 
-    //pthread_mutex_unlock(&PEER(key)->mutex);
+    pthread_mutex_unlock(&PEER(key)->mutex);
     selector_set_interest(key->s, key->fd, OP_READ);
 }
 
@@ -453,13 +453,13 @@ void requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t 
         return;
     }
 
-    //pthread_mutex_lock(&peer->mutex);
+    pthread_mutex_lock(&peer->mutex);
 
     snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%d:%d", hash, (int)byteFrom, (int)byteTo);
 
-    memset(peer->responseBuffer, '\0', CHUNKSIZE + 1);
+    memset(peer->responseBuffer, 0, sizeof(peer->responseBuffer));
 
     peer->writeReady = true;
 
-    //pthread_mutex_unlock(&peer->mutex);
+    pthread_mutex_unlock(&peer->mutex);
 }

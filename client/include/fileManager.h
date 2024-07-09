@@ -6,7 +6,7 @@
 #define CHUNKSIZE 1024
 
 long getFileSize(char* md5);
-long copyFromFile(char* buffer,char* md5,long offset,long bytes);
+long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes);
 long removeFile(char* md5);
 long initializeFileManager();
 long addFile(char* md5,char* filename);

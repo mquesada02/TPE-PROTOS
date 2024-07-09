@@ -2,6 +2,8 @@
 #define TPE_PROTOS_CONNECTIONMANAGER_H
 
 #include <bits/pthreadtypes.h>
+
+#include "fileManager.h"
 #include "selector.h"
 
 #define REQUEST_BUFFER_SIZE 256
@@ -14,7 +16,7 @@ struct peerMng {
     char requestBuffer[REQUEST_BUFFER_SIZE];
 
     bool readReady;
-    char * responseBuffer[CHUNKSIZE + 1];
+    char responseBuffer[CHUNKSIZE + 1];
 
     pthread_mutex_t mutex;
 

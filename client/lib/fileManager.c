@@ -34,13 +34,17 @@ int chunksRetrieved;
 char* filename = NULL;
 bool completed;
 
-long copyFromFile(char* buffer,char* md5,long offset,long bytes){
+long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
     FILE* file=lookup(map,md5);
     if(file==NULL)
         return -1;
     fseek(file,offset,SEEK_SET);
-    fgets(buffer,bytes,file);
-    return 0;
+    size_t bytesRead=fread(buffer,1,bytes,file);
+    if(bytesRead<bytes){
+        buffer[bytesRead]=0;
+    }
+    printf("%s\n",buffer);
+    return bytesRead;
 }
 
 long addFile(char* md5,char* filename){
@@ -158,7 +162,7 @@ int retrievedChunk(int chunkNum, char* chunk) {
         stateMap[stateMapIndex].state = MISSING;
     }
 
-    strncpy(&buffer[chunkNum], chunk, CHUNKSIZE);
+    memcpy(buffer+chunkNum, chunk, CHUNKSIZE);
     stateMap[stateMapIndex].state = RETRIEVED;
     chunksRetrieved++;
 
