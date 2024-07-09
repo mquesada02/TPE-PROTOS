@@ -397,6 +397,33 @@ bool userFind(UserState * user, char * ip, char * port) {
   return userFind(user->next, ip, port);
 }
 
+UserNode * _addLeecher(UserNode * node, char * username) {
+  int cmp;
+  if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
+    // reached the end of the list or passed. Insert new node
+    UserNode * newNode = malloc(sizeof(UserNode));
+    strcpy(newNode->username, username);
+    newNode->next = node;
+    return newNode;
+  }
+  if (cmp < 0) {
+    node->next = _addLeecher(node->next, username);
+  }
+  return node;
+}
+
+void findNAddLeecher(FileList * node, char * hash, char * username) {
+  if (fileList == NULL || fileList->file == NULL) return;
+  if (strcmp(fileList->file->MD5, hash) == 0) {
+    fileList->file->leechers = _addLeecher(fileList->file->leechers, username);
+  }
+}
+
+void addLeecher(char * hash, char * ip, char * port) {
+  char * username = getUsernameFromIpNPort(ip, port);
+ findNAddLeecher(fileList, hash, username);
+}
+
 bool userIsLoggedIn(char * ip, char * port) {
   if (state == NULL) return false;
   return userFind(state->first, ip, port);
@@ -429,9 +456,10 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       char * ip = strtok(NULL, ":");
       char * port = strtok(NULL, " ");
       char * hash = strtok(NULL, "\n");
-      if (checkIpNPort(hash, ip, port))
+      if (checkIpNPort(hash, ip, port)) {
         sendto(fd, "User and file are available\n", strlen("User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-      else
+        addLeecher(hash, ipstr, portstr);
+      } else
         sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     }
   } else {
