@@ -113,7 +113,7 @@ void parse_args(const int argc, char **argv, struct clientArgs *args) {
                 exit(0);
                 break;
             case 'N':
-                args->conectionLimit=optarg;
+                args->conectionLimit=atoi(optarg);
                 break;
             default:
                 fprintf(stderr, "unknown argument %d.\n", c);
