@@ -369,7 +369,6 @@ int setupPeerSocket(const char *ip, const char *port) {
 
 }
 
-
 struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
     int socket = 0;
     socket = setupPeerSocket(ip, port);
@@ -398,7 +397,7 @@ struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
 }
 
 void peerRead(struct selector_key *key) {
-    pthread_mutex_lock(&PEER(key)->mutex);
+    //pthread_mutex_lock(&PEER(key)->mutex);
 
     ssize_t bytes = recv(key->fd, PEER(key)->responseBuffer, PEER(key)->responseBufferSize, 0);
 
@@ -411,12 +410,12 @@ void peerRead(struct selector_key *key) {
         return;
     }
 
-    pthread_mutex_unlock(&PEER(key)->mutex);
+    //pthread_mutex_unlock(&PEER(key)->mutex);
     selector_set_interest(key->s, key->fd, OP_WRITE);
 }
 
 void peerWrite(struct selector_key *key) {
-    pthread_mutex_lock(&PEER(key)->mutex);
+    //pthread_mutex_lock(&PEER(key)->mutex);
 
     if (!PEER(key)->writeReady) {
         pthread_mutex_unlock(&PEER(key)->mutex);
@@ -433,7 +432,7 @@ void peerWrite(struct selector_key *key) {
 
     PEER(key)->writeReady = false;
 
-    pthread_mutex_unlock(&PEER(key)->mutex);
+    //pthread_mutex_unlock(&PEER(key)->mutex);
     selector_set_interest(key->s, key->fd, OP_READ);
 }
 
@@ -442,7 +441,7 @@ void requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t 
         return;
     }
 
-    pthread_mutex_lock(&peer->mutex);
+    //pthread_mutex_lock(&peer->mutex);
 
     snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%d:%d", hash, (int)byteFrom, (int)byteTo);
 
@@ -458,5 +457,5 @@ void requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t 
 
     peer->writeReady = true;
 
-    pthread_mutex_unlock(&peer->mutex);
+    //pthread_mutex_unlock(&peer->mutex);
 }

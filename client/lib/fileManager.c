@@ -106,6 +106,7 @@ void endFileManager(){
 //inicializa todas las variables para poder ir juntando los chinks del archivo
 void initFileBuffer(char* newFilename, int size) {
     stateMapSize = ceil(size/CHUNKSIZE);
+    if(stateMapSize == 0) stateMapSize = 1;
     int bufferSize = stateMapSize*CHUNKSIZE+1; //+1 por \0? no se
     buffer = malloc(bufferSize);
     stateMap = malloc(stateMapSize*sizeof(StateValue));
@@ -113,7 +114,7 @@ void initFileBuffer(char* newFilename, int size) {
         stateMap[i].state = MISSING;
         stateMap[i].timesAttempted = 0;
     }
-    for(int i = size; bufferSize; i++) buffer[size] = '\0';
+    memset(buffer, '\0', bufferSize);
     filename = malloc(strlen(newFilename));
     strcpy(filename, newFilename);
     completed = false;
@@ -132,7 +133,7 @@ int nextChunk() {
     int i = 0;
     while(i<stateMapSize && stateMap[i].state != MISSING) i++;
 
-    if(i==stateMapSize) return -2;
+    if(i==stateMapSize) return -3;
     stateMap[i].state = OBTAINING;
     return i*CHUNKSIZE;
 }
