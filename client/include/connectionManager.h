@@ -14,8 +14,8 @@ struct peerMng {
     char requestBuffer[REQUEST_BUFFER_SIZE];
 
     bool readReady;
-    char * responseBuffer;
-    size_t responseBufferSize;
+    char * responseBuffer[CHUNKSIZE + 1];
+
     pthread_mutex_t mutex;
 
 };

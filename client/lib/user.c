@@ -23,7 +23,7 @@ enum STATUS {
 struct Peer {
     struct peerMng *peer;
     int status;
-    long currByte;
+    int currByte;
 };
 
 #define LOGIN "PLAIN"
@@ -93,7 +93,7 @@ void* handleDownload() {
                 int byte = 0;
                 switch (peers[i].status) {
                     case READ_READY:
-                        retrievedChunk(peers[i].currByte / CHUNKSIZE, peers[i].peer->responseBuffer);
+                        retrievedChunk(peers[i].currByte, peers[i].peer->responseBuffer);
                         peers[i].status = WAITING;
                         break;
                     case WAITING:
@@ -225,7 +225,7 @@ void downloadHandler(PARAMS) {
 
     //TODO pedir el tamaño del archivo del tracker, pedir los peers y armarlos
 
-    initFileBuffer("testFile", 50);
+    initFileBuffer("esto_es_de_manu", 380000);
 
 
     downloading = true;

@@ -334,9 +334,6 @@ struct peerMng *initializePeerMng() {
 void cleanupPeerMng(struct peerMng *peer) {
     if (peer != NULL) {
         pthread_mutex_destroy(&peer->mutex);
-        if (peer->responseBuffer != NULL) {
-            free(peer->responseBuffer);
-        }
         free(peer);
     }
 }
@@ -406,7 +403,7 @@ void peerRead(struct selector_key *key) {
         return;
     }
 
-    ssize_t bytes = recv(key->fd, PEER(key)->responseBuffer, PEER(key)->responseBufferSize, 0);
+    ssize_t bytes = recv(key->fd, PEER(key)->responseBuffer, CHUNKSIZE, 0);
 
     if (bytes > 0) {
         PEER(key)->readReady = true;
@@ -437,6 +434,8 @@ void peerWrite(struct selector_key *key) {
 
     ssize_t bytes = send(key->fd, PEER(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
 
+    memset(PEER(key)->requestBuffer, '\0', REQUEST_BUFFER_SIZE);
+
     if (bytes <= 0) {
         PEER(key)->killFlag = true;
         pthread_mutex_unlock(&PEER(key)->mutex);
@@ -458,15 +457,7 @@ void requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t 
 
     snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%d:%d", hash, (int)byteFrom, (int)byteTo);
 
-
-    if (peer->responseBuffer != NULL) {
-        free(peer->responseBuffer);
-        peer->responseBufferSize = 0;
-        peer->responseBuffer = NULL;
-    }
-
-    peer->responseBuffer = malloc(sizeof(char) * (byteTo - byteFrom));
-    peer->responseBufferSize = byteTo - byteFrom;
+    memset(peer->responseBuffer, '\0', CHUNKSIZE + 1);
 
     peer->writeReady = true;
 
