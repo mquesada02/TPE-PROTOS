@@ -4,17 +4,13 @@
 #include <stdbool.h>
 
 #define MAX_USERS 600
-
 struct user {
     char *name;
     char *pass;
 };
 
-struct tracker_args {
-    char *          log_dir;
 
-    char *          log_file;
-
+struct clientArgs {
     char           *trackerSocksAddr;
     unsigned short  trackerSocksPort;
 
@@ -25,8 +21,8 @@ struct tracker_args {
     unsigned short  mng_port;
 
     bool            disectors_enabled;
-
-    struct user    users[MAX_USERS];
+    struct user     users[MAX_USERS];
+    int             conectionLimit;
 };
 
 /**
@@ -34,6 +30,6 @@ struct tracker_args {
  * args con defaults o la seleccion humana. Puede cortar
  * la ejecución.
  */
-void parse_args(const int argc, char **argv, struct tracker_args *args);
+void parse_args(const int argc, char **argv, struct clientArgs *args);
 
 #endif

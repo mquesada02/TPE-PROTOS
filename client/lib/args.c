@@ -12,7 +12,7 @@ static unsigned short port(const char *s) {
      const long sl = strtol(s, &end, 10);
 
      if (end == s || '\0' != *end
-        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno) 
+        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
         || sl < 0 || sl > USHRT_MAX) {
          fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
          exit(1);
@@ -49,13 +49,14 @@ static void usage(const char *progname) {
         "   -l <addr>        Dirección donde servirá el servidor SMTP.\n"
         "   -P <con port>    Puerto entrante para conexiones.\n"
         "   -u <name>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
+        "   -N <limit>       Limite de conexiones a aceptar \n"
         "   -v               Imprime información sobre la versión y termina.\n"
         "\n",
         progname);
     exit(1);
 }
 
-void parse_args(const int argc, char **argv, struct tracker_args *args) {
+void parse_args(const int argc, char **argv, struct clientArgs *args) {
     memset(args, 0, sizeof(*args)); // sobre todo para setear en null los punteros de users
 
     args->leecherSocksAddr = "0.0.0.0";
@@ -81,7 +82,7 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
             { 0,           0,                 0, 0 }
         };
 
-        c = getopt_long(argc, argv, "hl:L:P:u:v", long_options, &option_index);
+        c = getopt_long(argc, argv, "hl:L:P:u:vN:", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -110,6 +111,9 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
             case 'v':
                 version();
                 exit(0);
+                break;
+            case 'N':
+                args->conectionLimit=optarg;
                 break;
             default:
                 fprintf(stderr, "unknown argument %d.\n", c);

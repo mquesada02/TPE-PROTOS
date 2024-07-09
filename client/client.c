@@ -34,8 +34,8 @@ static void sigterm_handler(const int signal) {
 int main(int argc,char ** argv){
     unsigned int port = 15555;
 
-    struct tracker_args args;
-
+    struct clientArgs args;
+    args.conectionLimit = 0; //indica que no tiene limite 
     args.trackerSocksPort = port;
 
     parse_args(argc, argv, &args);
