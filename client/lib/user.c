@@ -93,7 +93,6 @@ void* handleDownload() {
                 int byte = 0;
                 switch (peers[i].status) {
                     case READ_READY:
-                        //TODO handle read
                         retrievedChunk(peers[i].currByte / CHUNKSIZE, peers[i].peer->responseBuffer);
                         peers[i].status = WAITING;
                         break;
@@ -101,10 +100,11 @@ void* handleDownload() {
                         printf("Assigning Peer %d", i);
                         byte = nextChunk();
                         printf(" Byte: %d\n", byte);
+
                         if (byte == -2) {
                             for (int j = 0; j < activePeers; j++) {
                                 if (peers[i].status == WAITING) {
-                                    free(peers[i].peer);
+                                    peers[i].peer->killFlag = true;
                                     peers[i].peer = NULL;
                                     peers[i].status = DEAD;
                                     peersFinished++;
@@ -116,11 +116,21 @@ void* handleDownload() {
                                 downloading = false;
                             }
                             break;
-                        } else if (byte == -3) {
-                            free(peers[i].peer);
+                        }
+
+                        else if (byte == -3) {
+
+                            peers[i].peer->killFlag = true;
                             peers[i].peer = NULL;
                             peers[i].status = DEAD;
                             peersFinished++;
+
+                            if (peersFinished == activePeers) {
+                                activePeers = 0;
+                                peersFinished = 0;
+                                downloading = false;
+                            }
+                            break;
                         }
                         requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE);
                         peers[i].currByte = byte;
