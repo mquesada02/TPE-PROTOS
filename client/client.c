@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
-
+#include <syslog.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -40,11 +40,15 @@ int main(int argc,char ** argv){
 
     parse_args(argc, argv, &args);
 
+    openlog("client-application",LOG_PID | LOG_NDELAY ,LOG_LOCAL1);
+    syslog(LOG_NOTICE,"Client application started");
+
     initializeFileManager();
 
     const char       *err_msg = NULL;
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
+
 
     char trackerPortStr[6];
     sprintf(trackerPortStr, "%d",args.trackerSocksPort);
@@ -117,6 +121,8 @@ int main(int argc,char ** argv){
     }
 
     finally:
+    syslog(LOG_NOTICE,"Closing client application");
+    closelog();
     if(ss != SELECTOR_SUCCESS) {
         fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg, ss == SELECTOR_IO ? strerror(errno): selector_error(ss));
     } else if(err_msg) {
