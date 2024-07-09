@@ -8,6 +8,8 @@
 
 struct peerMng {
 
+    bool killFlag;
+
     bool writeReady;
     char requestBuffer[REQUEST_BUFFER_SIZE];
 

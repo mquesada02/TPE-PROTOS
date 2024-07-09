@@ -122,6 +122,7 @@ void initFileBuffer(char* newFilename, int size) {
     memset(buffer, '\0', bufferSize);
     filename = malloc(strlen(newFilename));
     strcpy(filename, newFilename);
+    chunksRetrieved = 0;
     completed = false;
 }
 
@@ -163,23 +164,39 @@ int retrievedChunk(int chunkNum, char* chunk) {
 
     if(chunksRetrieved == stateMapSize) {
 
-        FILE* newFile;
-        int len = strlen("repository/")+strlen(filename);
-        char aux[len+1];
-        strcpy(aux, "repository/");
+        FILE *newFile;
+        int len = strlen("repository/") + strlen(filename);
+        char *aux = (char *)malloc(len + 1); // Allocate memory for aux
+        if (aux == NULL) {
+            perror("Unable to allocate memory for aux");
+            return 1;
+        }
+
+        strcpy(aux, "../repository/");
         strcat(aux, filename);
 
         newFile = fopen(aux, "w+");
+        if (newFile == NULL) {
+            perror("Unable to open file");
+            free(aux);
+            return 1;
+        }
 
-        fprintf(newFile, "%s", buffer);
+        if (fprintf(newFile, "%s", buffer) < 0) {
+            perror("Error writing to file");
+            fclose(newFile);
+            free(aux);
+            return 1;
+        }
 
         fclose(newFile);
+        free(aux);
 
-        free(buffer);
+        free((void *)buffer);
         buffer = NULL;
         free(stateMap);
         stateMap = NULL;
-        free(filename);
+        free((void *)filename);
         filename = NULL;
 
         completed = true;
