@@ -349,17 +349,26 @@ void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr) 
   sendFiles(fd, fileList->next, client_addr);
 }
 
-bool _checkIpNPort(UserState * node, char * ip, char * port) {
+bool hasSeeder(UserNode * node, char * username) {
   if (node == NULL)
     return false;
-  if (strcmp(node->ip, ip) == 0 && strcmp(node->port, port) == 0) {
+  if (strcmp(node->username, username) == 0)
     return true;
-  }
-  return _checkIpNPort(node->next, ip, port);
+  return hasSeeder(node->next, username);
 }
 
-bool checkIpNPort(char * ip, char * port) {
-  return _checkIpNPort(state->first, ip, port);
+bool _checkIpNPort(FileList * node, char * hash, char * ip, char * port) {
+  if (node == NULL || node->file == NULL)
+    return false;
+  if (strcmp(node->file->MD5,hash) == 0) {
+    char * username = getUsernameFromIpNPort(ip, port);
+    return hasSeeder(node->file->seeders, username);
+  }
+  return _checkIpNPort(node->next, hash, ip, port);
+}
+
+bool checkIpNPort(char * hash, char * ip, char * port) {
+  return _checkIpNPort(fileList, hash, ip, port);
 }
 
 
@@ -418,11 +427,12 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
     } else 
     if (strcmp(cmd, "CHECK") == 0) {
       char * ip = strtok(NULL, ":");
-      char * port = strtok(NULL, "\n");
-      if (checkIpNPort(ip, port))
-        sendto(fd, "User is available\n", strlen("User is available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+      char * port = strtok(NULL, " ");
+      char * hash = strtok(NULL, "\n");
+      if (checkIpNPort(hash, ip, port))
+        sendto(fd, "User and file are available\n", strlen("User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
       else
-        sendto(fd, "User is unavailable\n", strlen("User is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+        sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     }
   } else {
     if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
