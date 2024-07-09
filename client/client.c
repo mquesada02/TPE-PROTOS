@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
+#include <pthread.h>
 #include <syslog.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -35,7 +36,7 @@ int main(int argc,char ** argv){
     unsigned int port = 15555;
 
     struct clientArgs args;
-    args.conectionLimit = 0; //indica que no tiene limite 
+    args.conectionLimit = 0; //indica que no tiene limite
     args.trackerSocksPort = port;
 
     parse_args(argc, argv, &args);
@@ -107,6 +108,11 @@ int main(int argc,char ** argv){
         err_msg = "Unable to register FD for IPv4/IPv6.";
         goto finally;
     }
+
+    pthread_t tid;
+
+    pthread_create(&tid, NULL, handleDownload, NULL);
+    pthread_detach(tid);
 
     while(!done) {
         err_msg = NULL;

@@ -6,13 +6,28 @@
 
 #include "../include/user.h"
 #include "../include/selector.h"
+#include "../include/fileManager.h"
 #include "../include/utils.h"
 #include "../include/connectionManager.h"
 
 #define INPUT_SIZE 256
+#define MAX_PEERS 5
+
+enum STATUS {
+    READ_READY,
+    WAITING,
+    BUSY,
+    DEAD
+};
+
+struct Peer {
+    struct peerMng *peer;
+    int status;
+    long currByte;
+};
 
 #define LOGIN "PLAIN"
-#define FILES "LIST"
+#define FILES "LIST files"
 #define SEND '\n'
 
 #define LEECH(key) ( (struct Tracker *) (key)->data)
@@ -20,6 +35,15 @@
 #define PARAMS int argc, char *argv[], struct selector_key *key
 
 char inputBuffer[INPUT_SIZE];
+
+struct Peer peers[MAX_PEERS];
+
+int activePeers = 0;
+int peersFinished = 0;
+
+bool downloading = false;
+
+char fileHash[33];
 
 struct Command {
     char *cmd;
@@ -62,12 +86,66 @@ void parseCommand(char *input, struct selector_key *key) {
     printf("Unknown command: %s\n", command);
 }
 
+void* handleDownload() {
+    while(true) {
+        if (downloading) {
+            for (int i = 0; i < activePeers; i++) {
+                int byte = 0;
+                switch (peers[i].status) {
+                    case READ_READY:
+                        //TODO handle read
+                        retrievedChunk(peers[i].currByte / CHUNKSIZE, peers[i].peer->responseBuffer);
+                        peers[i].status = WAITING;
+                        break;
+                    case WAITING:
+                        printf("Assigning Peer %d", i);
+                        byte = nextChunk();
+                        printf(" Byte: %d\n", byte);
+                        if (byte == -2) {
+                            for (int j = 0; j < activePeers; j++) {
+                                if (peers[i].status == WAITING) {
+                                    free(peers[i].peer);
+                                    peers[i].peer = NULL;
+                                    peers[i].status = DEAD;
+                                    peersFinished++;
+                                }
+                            }
+                            if (peersFinished == activePeers) {
+                                activePeers = 0;
+                                peersFinished = 0;
+                                downloading = false;
+                            }
+                            break;
+                        } else if (byte == -3) {
+                            free(peers[i].peer);
+                            peers[i].peer = NULL;
+                            peers[i].status = DEAD;
+                            peersFinished++;
+                        }
+                        requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE);
+                        peers[i].currByte = byte;
+                        peers[i].status = BUSY;
+                        break;
+                    case BUSY:
+                        if (peers[i].peer->readReady) {
+                            peers[i].status = READ_READY;
+                        }
+                        break;
+                    case DEAD:
+                        //TODO handle dead
+                        break;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 void handleInput(struct selector_key *key) {
     ssize_t bytesRead = read(key->fd, inputBuffer, INPUT_SIZE - 1);
     if (bytesRead <= 0) {
         return;
     }
-
     inputBuffer[bytesRead] = '\0';
     parseCommand(inputBuffer, key);
 }
@@ -135,11 +213,19 @@ void downloadHandler(PARAMS) {
         printf("Invalid parameter amount\n");
     }
 
-    struct peerMng* p1 = addPeer(key, argv[1], argv[2]);
-    struct peerMng* p2 = addPeer(key, argv[1], argv[2]);
-    struct peerMng* p3 = addPeer(key, argv[1], argv[2]);
+    //TODO pedir el tamaño del archivo del tracker, pedir los peers y armarlos
 
-    requestFromPeer(p1, argv[3], 0, 5);
-    requestFromPeer(p2, argv[3], 6, 10);
-    requestFromPeer(p3, argv[3], 10, 9999);
+    initFileBuffer("testFile", 50);
+
+
+    downloading = true;
+    strncpy(fileHash, argv[3], 32);
+
+    struct peerMng* p1 = addPeer(key, argv[1], argv[2]);
+
+    peers[0].peer = p1;
+    peers[0].status = WAITING;
+    activePeers = 1;
+    peersFinished = 0;
+    printf("Started Download\n");
 }
