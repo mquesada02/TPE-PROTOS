@@ -105,6 +105,11 @@ void endFileManager(){
 
 //inicializa todas las variables para poder ir juntando los chinks del archivo
 void initFileBuffer(char* newFilename, int size) {
+    if(buffer){
+        perror("A file is already being downloaded.");
+        return;
+    }
+
     stateMapSize = ceil(size/CHUNKSIZE);
     if(stateMapSize == 0) stateMapSize = 1;
     int bufferSize = stateMapSize*CHUNKSIZE+1; //+1 por \0? no se
@@ -123,12 +128,13 @@ void initFileBuffer(char* newFilename, int size) {
 //deberia llamarse con un while nextChunk()!=-2 (o similar)(?
 //devuelve el indice del principio del chunk que tiene quue buscar
 int nextChunk() {
+
+    if(completed) return -2;
+
     if(buffer == NULL) {
         perror("Must initialize File Buffer first");
         return -1;
     }
-
-    if(completed) return -2;
 
     int i = 0;
     while(i<stateMapSize && stateMap[i].state != MISSING) i++;
@@ -158,7 +164,12 @@ int retrievedChunk(int chunkNum, char* chunk) {
     if(chunksRetrieved == stateMapSize) {
 
         FILE* newFile;
-        newFile = fopen(strcat("repository/", filename), "w+");
+        int len = strlen("repository/")+strlen(filename);
+        char aux[len+1];
+        strcpy(aux, "repository/");
+        strcat(aux, filename);
+
+        newFile = fopen(aux, "w+");
 
         fprintf(newFile, "%s", buffer);
 
@@ -175,4 +186,19 @@ int retrievedChunk(int chunkNum, char* chunk) {
 
     }
     return 0;
+}
+
+void cancelDownload() {
+    if(buffer){
+        free(buffer);
+        buffer = NULL;
+    }
+    if (stateMap){
+        free(stateMap);
+        stateMap = NULL;
+    }
+    if(filename){
+        free(filename);
+        filename = NULL;
+    }
 }
