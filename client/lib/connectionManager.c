@@ -243,19 +243,19 @@ void leecherRead(struct selector_key *key) {
     //if (!isValidNumber(tempByteFrom) || !isValidNumber(tempByteTo))
     //    goto error;
 
-    int byteFrom = atoi(tempByteFrom);
-    int byteTo = atoi(tempByteTo);
+    long byteFrom = atol(tempByteFrom);
+    long byteTo = atol(tempByteTo);
 
-    int size = byteTo - byteFrom;
+    long size = byteTo - byteFrom;
 
     if (size <= 1)
         goto error;
 
     LEECH(key)->responseBuffer = malloc(size + 1);
 
-    copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size);
+    long bytesRead=copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size);
 
-    ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, size, 0);
+    ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, bytesRead, 0);
     if (sent_bytes <= 0) {
         perror("Failed to send response\n");
         goto error;
@@ -408,6 +408,7 @@ void peerRead(struct selector_key *key) {
 
     if (bytes > 0) {
         PEER(key)->readReady = true;
+        addBytesRead(bytes);
     } else {
         PEER(key)->killFlag = true;
         pthread_mutex_unlock(&PEER(key)->mutex);
@@ -459,7 +460,7 @@ int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t b
         return -1;
     }
 
-    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%d:%d", hash, (int)byteFrom, (int)byteTo);
+    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%lu:%lu", hash, byteFrom, byteTo);
 
     memset(peer->responseBuffer, 0, sizeof(peer->responseBuffer));
 

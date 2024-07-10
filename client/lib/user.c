@@ -104,6 +104,7 @@ void* handleDownload() {
                 int byte = 0;
                 switch (peers[i].status) {
                     case READ_READY:
+                        memset(buff,0,CHUNKSIZE);
                         if(readFromPeer(peers[i].peer, buff) != -1) {
                             retrievedChunk(peers[i].currByte, buff);
                             peers[i].status = WAITING;
