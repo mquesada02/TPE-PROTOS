@@ -27,13 +27,17 @@ typedef struct StateValue {
 } StateValue;
 
 fileMap map;
+int bufferSize = 0;
 char* buffer = NULL;
 int stateMapSize = 0;
 StateValue* stateMap = NULL;
 int chunksRetrieved;
 char* filename = NULL;
 size_t fileSize = 0;
+FILE* newFile;
 bool completed;
+int sections = 0; //tamañño del archivo dividido 5MB
+int currentSection = 0;
 
 long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
     FILE* file=lookup(map,md5);
@@ -112,10 +116,23 @@ void initFileBuffer(char* newFilename, long unsigned int size) {
         return;
     }
 
-    stateMapSize = size % CHUNKSIZE==0 ? size/CHUNKSIZE : (size/CHUNKSIZE)+1;
-    long unsigned int bufferSize = stateMapSize*CHUNKSIZE+1;
     fileSize = size;
-    buffer = malloc(bufferSize);
+
+    if(size<=SECTIONSIZE){
+        stateMapSize = size % CHUNKSIZE==0 ? size/CHUNKSIZE : (size/CHUNKSIZE)+1;
+        bufferSize = stateMapSize*CHUNKSIZE+1;
+        buffer = malloc(bufferSize);
+    } else{
+        buffer = malloc(SECTIONSIZE);
+        bufferSize = SECTIONSIZE;
+        stateMapSize = SECTIONSIZE/CHUNKSIZE;
+        sections = size % SECTIONSIZE==0? size/SECTIONSIZE : (size/SECTIONSIZE)+1;
+        currentSection = 0;
+    }
+    if (buffer == NULL){
+        perror("Unable to allocate memory for downloading file");
+        return;
+    }
     stateMap = malloc(stateMapSize*sizeof(StateValue));
     for(int i=0; i<stateMapSize; i++) {
         stateMap[i].state = MISSING;
@@ -126,6 +143,26 @@ void initFileBuffer(char* newFilename, long unsigned int size) {
     strcpy(filename, newFilename);
     chunksRetrieved = 0;
     completed = false;
+}
+
+void initForNewSection() {
+
+    if(currentSection == sections-1){
+        int lastSection = fileSize%SECTIONSIZE;
+        stateMapSize = lastSection % CHUNKSIZE==0 ? lastSection/CHUNKSIZE : (lastSection/CHUNKSIZE)+1;
+        bufferSize = stateMapSize*CHUNKSIZE+1;
+        free(stateMap);
+        stateMap = malloc(stateMapSize*sizeof(StateValue));
+        free(buffer);
+        buffer =  malloc(bufferSize);
+    }
+
+    for(int i=0; i<stateMapSize; i++) {
+        stateMap[i].state = MISSING;
+        stateMap[i].timesAttempted = 0;
+    }
+    memset(buffer, '\0', bufferSize);
+
 }
 
 //deberia llamarse con un while nextChunk()!=-2 (o similar)(?
@@ -144,7 +181,7 @@ int nextChunk() {
 
     if(i==stateMapSize) return -3;
     stateMap[i].state = OBTAINING;
-    return i*CHUNKSIZE;
+    return i*CHUNKSIZE+currentSection*SECTIONSIZE;
 }
 
 //funcion para que el cliente le pase al file manager el contenido del byte que consiguio
@@ -166,7 +203,6 @@ int retrievedChunk(int chunkNum, char* chunk) {
 
     if(chunksRetrieved == stateMapSize) {
 
-        FILE *newFile;
         int len = strlen("../repository/") + strlen(filename);
         char *aux = (char *)malloc(len); // Allocate memory for aux
         if (aux == NULL) {
@@ -177,25 +213,32 @@ int retrievedChunk(int chunkNum, char* chunk) {
         strcpy(aux, "../repository/");
         strcat(aux, filename);
 
-        newFile = fopen(aux, "w+");
+        newFile = fopen(aux, "a");
         if (newFile == NULL) {
             perror("Unable to open file");
             free(aux);
             return 1;
         }
 
-        fwrite(buffer, 1, fileSize, newFile);
+        fwrite(buffer, 1, bufferSize, newFile);
         fclose(newFile);
         free(aux);
 
-        free((void *)buffer);
-        buffer = NULL;
-        free(stateMap);
-        stateMap = NULL;
-        free((void *)filename);
-        filename = NULL;
+        if(sections==0||++currentSection==sections){
+            free((void *)buffer);
+            buffer = NULL;
+            free(stateMap);
+            stateMap = NULL;
+            free((void *)filename);
+            filename = NULL;
+            newFile = NULL;
+            sections = 0;
+            currentSection = 0;
 
-        completed = true;
+            completed = true;
+        } else{
+            initForNewSection();
+        }
 
     }
     return 0;
@@ -214,4 +257,18 @@ void cancelDownload() {
         free(filename);
         filename = NULL;
     }
+    if(newFile){
+        int len = strlen("../repository/") + strlen(filename);
+        char* aux = malloc(len); // Allocate memory for aux
+        if (aux == NULL) {
+            perror("Unable to allocate memory for aux");
+            return;
+        }
+        strcpy(aux, "../repository/");
+        strcat(aux, filename);
+        remove(aux);
+        newFile = NULL;
+    }
+    sections = 0;
+    currentSection = 0;
 }
