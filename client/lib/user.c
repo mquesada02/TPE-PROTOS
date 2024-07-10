@@ -43,6 +43,7 @@ int activePeers = 0;
 int peersFinished = 0;
 
 bool downloading = false;
+bool paused = false;
 
 char fileHash[33];
 
@@ -54,11 +55,17 @@ struct Command {
 void filesHandler(PARAMS);
 void downloadHandler(PARAMS);
 void loginHandler(PARAMS);
+void pauseHandler(PARAMS);
+void resumeHandler(PARAMS);
+void cancelHandler(PARAMS);
 
 struct Command commands[] = {
         {.cmd = "login", .handler = loginHandler},
         {.cmd = "files", .handler = filesHandler},
         {.cmd = "download", .handler = downloadHandler},
+        {.cmd = "pause", .handler = pauseHandler},
+        {.cmd = "resume", .handler = resumeHandler},
+        {.cmd = "cancel", .handler = cancelHandler},
         {NULL, NULL}
 };
 
@@ -90,7 +97,7 @@ void parseCommand(char *input, struct selector_key *key) {
 void* handleDownload() {
     char buff[CHUNKSIZE];
     while(true) {
-        if (downloading) {
+        if (downloading && !paused) {
             for (int i = 0; i < activePeers; i++) {
                 int byte = 0;
                 switch (peers[i].status) {
@@ -234,6 +241,7 @@ void downloadHandler(PARAMS) {
 
 
     downloading = true;
+    paused = false;
 
     struct peerMng* p1 = addPeer(key, argv[1], argv[2]);
     struct peerMng* p2 = addPeer(key, argv[1], argv[2]);
@@ -245,4 +253,33 @@ void downloadHandler(PARAMS) {
     activePeers = 2;
     peersFinished = 0;
     printf("Started Download\n");
+}
+
+void pauseHandler(PARAMS) {
+    if(downloading && !paused) {
+        paused = true;
+        printf("Download Paused\n");
+    }
+    printf("Nothing to Pause\n");
+}
+void resumeHandler(PARAMS) {
+    if(downloading && paused) {
+        paused = false;
+        printf("Download Resumed\n");
+    }
+    printf("Nothing to Resume\n");
+}
+void cancelHandler(PARAMS) {
+    if(downloading) {
+        paused = true;
+        cancelDownload();
+        for(int i=0; i<activePeers; i++) {
+            if(peers[i].status != DEAD) {
+                peers[i].peer->killFlag = true;
+                peers[i].status = DEAD;
+                peers[i].peer = NULL;
+            }
+        }
+        printf("Download Cancelled\n");
+    }
 }
