@@ -3,10 +3,10 @@
 
 
 #define CHUNKSIZE (1024*1024)
-#define SECTIONSIZE (5*CHUNKSIZE) //5MB, tamaño máximo del buffer de descarga
+#define SECTIONSIZE (1*CHUNKSIZE) //5MB, tamaño máximo del buffer de descarga
 
 long unsigned int getFileSize(char* md5);
-long copyFromFile(char* buffer,char* md5,long offset, long unsigned int bytes);
+long copyFromFile(char* buffer,char* md5,long offset, unsigned long bytes);
 long removeFile(char* md5);
 long initializeFileManager();
 long addFile(char* md5,char* filename);

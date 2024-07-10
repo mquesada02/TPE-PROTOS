@@ -104,6 +104,7 @@ void* handleDownload() {
                 int byte = 0;
                 switch (peers[i].status) {
                     case READ_READY:
+                        memset(buff, '\0', CHUNKSIZE);
                         if(readFromPeer(peers[i].peer, buff) != -1) {
                             retrievedChunk(peers[i].currByte, buff);
                             peers[i].status = WAITING;
@@ -113,10 +114,10 @@ void* handleDownload() {
                         byte = nextChunk();
                         if (byte == -2) {
                             for (int j = 0; j < activePeers; j++) {
-                                if (peers[i].status == WAITING) {
-                                    peers[i].peer->killFlag = true;
-                                    peers[i].peer = NULL;
-                                    peers[i].status = DEAD;
+                                if (peers[j].status == WAITING) {
+                                    peers[j].peer->killFlag = true;
+                                    peers[j].peer = NULL;
+                                    peers[j].status = DEAD;
                                     peersFinished++;
                                 }
                             }
@@ -176,6 +177,17 @@ size_t receiveMessage(struct selector_key * key, char * buff, size_t len) {
                     (socklen_t *) sizeof(struct sockaddr_in));
 }
 
+void cleanUpPeers() {
+    for (int j = 0; j < activePeers; j++) {
+        if (peers[j].status != DEAD) {
+            peers[j].peer->killFlag = true;
+            peers[j].peer = NULL;
+            peers[j].status = DEAD;
+            peersFinished++;
+        }
+    }
+}
+
 void loginHandler(PARAMS) {
     if (argc != 3) {
         printf("Invalid parameter amount\n");
@@ -205,6 +217,7 @@ void loginHandler(PARAMS) {
 void filesHandler(PARAMS) {
     if(argc != 1) {
         printf("Invalid parameter amount\n");
+        return;
     }
 
     size_t requestSize = 256;
@@ -227,12 +240,13 @@ void filesHandler(PARAMS) {
 void downloadHandler(PARAMS) {
     if(argc != 4) {
         printf("Invalid parameter amount\n");
+        return;
     }
 
     //TODO pedir el tamaño del archivo del tracker, pedir los peers y armarlos
     strncpy(fileHash, argv[3], 32);
 
-    initFileBuffer("esto_es_de_manu", getFileSize(fileHash));
+    initFileBuffer("esto_es_de_manu.txt", getFileSize(fileHash));
 
 
     downloading = true;
@@ -254,6 +268,7 @@ void pauseHandler(PARAMS) {
     if(downloading && !paused) {
         paused = true;
         printf("Download Paused\n");
+        return;
     }
     printf("Nothing to Pause\n");
 }
@@ -261,6 +276,7 @@ void resumeHandler(PARAMS) {
     if(downloading && paused) {
         paused = false;
         printf("Download Resumed\n");
+        return;
     }
     printf("Nothing to Resume\n");
 }

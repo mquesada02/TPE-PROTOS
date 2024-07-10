@@ -31,7 +31,7 @@ void leecherRead(struct selector_key *key);
 //void leecherWrite(struct selector_key *key);
 void peerRead(struct selector_key *key);
 void peerWrite(struct selector_key *key);
-
+void cleanupPeerMng(struct peerMng *peer);
 
 struct leecherMng {
 
@@ -243,17 +243,17 @@ void leecherRead(struct selector_key *key) {
     //if (!isValidNumber(tempByteFrom) || !isValidNumber(tempByteTo))
     //    goto error;
 
-    int byteFrom = atoi(tempByteFrom);
-    int byteTo = atoi(tempByteTo);
+    long byteFrom = atol(tempByteFrom);
+    long byteTo = atol(tempByteTo);
 
-    int size = byteTo - byteFrom;
+    long size = byteTo - byteFrom;
 
     if (size <= 1)
         goto error;
 
     LEECH(key)->responseBuffer = malloc(size + 1);
 
-    copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size);
+    size = copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size);
 
     ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, size, 0);
     if (sent_bytes <= 0) {
@@ -459,8 +459,8 @@ int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t b
         return -1;
     }
 
-    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%d:%d", hash, (int)byteFrom, (int)byteTo);
-
+    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%lu:%lu", hash, byteFrom, byteTo);
+    printf("%s\n", peer->requestBuffer);
     memset(peer->responseBuffer, 0, sizeof(peer->responseBuffer));
 
     peer->writeReady = true;

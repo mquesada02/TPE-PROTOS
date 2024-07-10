@@ -127,6 +127,7 @@ int main(int argc,char ** argv){
     }
 
     finally:
+    cancelDownload();
     syslog(LOG_NOTICE,"Closing client application");
     closelog();
     if(ss != SELECTOR_SUCCESS) {
@@ -137,6 +138,7 @@ int main(int argc,char ** argv){
     if (selector != NULL)
         selector_destroy(selector);
     selector_close();
+    cleanUpPeers();
     if (tracker != NULL) {
         close(tracker->socket);
         free(tracker->trackerAddr);

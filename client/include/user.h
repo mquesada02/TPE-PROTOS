@@ -10,5 +10,6 @@ struct Tracker {
 
 void handleInput(struct selector_key *key);
 void* handleDownload();
+void cleanUpPeers();
 
 #endif //TPE_PROTOS_USER_H
