@@ -11,6 +11,7 @@ long removeFile(char* md5);
 long initializeFileManager();
 long addFile(char* md5,char* filename);
 void endFileManager();
+void cancelDownload();
 
 void initFileBuffer(char* newFilename, long unsigned int size);
 int nextChunk();

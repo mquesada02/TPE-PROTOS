@@ -1,4 +1,4 @@
-CFLAGS:= -std=c11 -pedantic -lpthread -pedantic-errors -g -Wall -Werror -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-discarded-qualifiers -Wno-unused-const-variable -D_POSIX_C_SOURCE=200112L
+CFLAGS:= -std=c11 -pedantic -lpthread -fsanitize=address -pedantic-errors -g -Wall -Werror -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-discarded-qualifiers -Wno-unused-const-variable -D_POSIX_C_SOURCE=200112L
 CLIENT_CLI:= client
 CLIENT_OBJS:= lib/args.o lib/selector.o lib/utils.o lib/connectionManager.o lib/user.o lib/fileMap.o lib/fileManager.o client.o
 

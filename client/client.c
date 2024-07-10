@@ -139,11 +139,12 @@ int main(int argc,char ** argv){
     selector_close();
     if (tracker != NULL) {
         close(tracker->socket);
+        free(tracker->trackerAddr);
         free(tracker);
     }
     if (leekerSocket >= 0)
         close(leekerSocket);
-    //TODO cerrar los sockets de los leekers
+
     return 0;
 }
 

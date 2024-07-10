@@ -68,9 +68,6 @@ void parse_args(const int argc, char **argv, struct clientArgs *args) {
     args->mng_addr   = "127.0.0.1";
     args->mng_port   = 8080;
 
-    //args->conf_addr  = "127.0.0.1";
-    //args->conf_port  = 2526;
-
     args->disectors_enabled = true;
 
     int c;
