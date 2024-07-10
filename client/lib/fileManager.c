@@ -38,7 +38,7 @@ FILE* newFile;
 bool completed;
 int sections = 0; //tamaño del archivo dividido 5MB
 int currentSection = 0;
-long bytesReadPerSection=0;
+long bytesReadPerSection;
 long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
     FILE* file=lookup(map,md5);
     if(file==NULL)
@@ -125,7 +125,7 @@ void initFileBuffer(char* newFilename, long unsigned int size) {
     }
 
     fileSize = size;
-
+    bytesReadPerSection=0;
     if(size<=SECTIONSIZE){
         stateMapSize = size % CHUNKSIZE==0 ? size/CHUNKSIZE : (size/CHUNKSIZE)+1;
         bufferSize = stateMapSize*CHUNKSIZE+1;
