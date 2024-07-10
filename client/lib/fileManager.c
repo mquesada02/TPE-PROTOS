@@ -40,9 +40,7 @@ long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
         return -1;
     fseek(file,offset,SEEK_SET);
     size_t bytesRead=fread(buffer,1,bytes,file);
-    if(bytesRead<bytes){
-        buffer[bytesRead]=0;
-    }
+    buffer[bytesRead]=0;
     printf("%s\n",buffer);
     return bytesRead;
 }
@@ -114,9 +112,8 @@ void initFileBuffer(char* newFilename, int size) {
         return;
     }
 
-    stateMapSize = ceil(size/CHUNKSIZE);
-    if(stateMapSize == 0) stateMapSize = 1;
-    int bufferSize = stateMapSize*CHUNKSIZE+1; //+1 por \0? no se
+    stateMapSize = size % CHUNKSIZE==0 ? size/CHUNKSIZE : (size/CHUNKSIZE)+1;
+    int bufferSize = stateMapSize*CHUNKSIZE+1;
     buffer = malloc(bufferSize);
     stateMap = malloc(stateMapSize*sizeof(StateValue));
     for(int i=0; i<stateMapSize; i++) {
