@@ -123,7 +123,7 @@ void initFileBuffer(char* newFilename, long unsigned int size) {
         stateMap[i].timesAttempted = 0;
     }
     memset(buffer, '\0', bufferSize);
-    filename = malloc(strlen(newFilename));
+    filename = malloc(strlen(newFilename)+1);
     strcpy(filename, newFilename);
     chunksRetrieved = 0;
     completed = false;
@@ -169,7 +169,7 @@ int retrievedChunk(int chunkNum, char* chunk) {
 
         FILE *newFile;
         int len = strlen("../repository/") + strlen(filename);
-        char *aux = (char *)malloc(len); // Allocate memory for aux
+        char *aux = malloc(len+1); // Allocate memory for aux
         if (aux == NULL) {
             perror("Unable to allocate memory for aux");
             return 1;
