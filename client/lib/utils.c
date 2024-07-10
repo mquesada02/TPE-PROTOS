@@ -18,10 +18,9 @@
 bool calculateMD5(char* filename, char md5Buffer[MD5_SIZE + 1]) {
     FILE *file = NULL;
 
-    char buff[strlen("md5sum ") + MAX_FILENAME];
-    memset(buff,0,strlen("md5sum ") + MAX_FILENAME);
-    strcat(buff, "md5sum ");
-    strcat(buff, filename);
+    char buff[strlen("md5sum ") + MAX_FILENAME + strlen("''")];
+    memset(buff,0,strlen("md5sum ") + MAX_FILENAME + strlen("''"));
+    sprintf(buff,"md5sum '%s'",filename);
 
     file = popen(buff,"r");
     md5Buffer[MD5_SIZE] = '\0';
