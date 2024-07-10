@@ -32,18 +32,16 @@ int stateMapSize = 0;
 StateValue* stateMap = NULL;
 int chunksRetrieved;
 char* filename = NULL;
+size_t fileSize = 0;
 bool completed;
 
-long copyFromFile(char* buffer,char* md5,long offset, int bytes){
+long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
     FILE* file=lookup(map,md5);
     if(file==NULL)
         return -1;
     fseek(file,offset,SEEK_SET);
-    int bytesRead=fread(buffer,1,bytes,file);
-    if(bytesRead<bytes){
-        buffer[bytesRead]=0;
-    }
-    printf("%s\n",buffer);
+    size_t bytesRead=fread(buffer,1,bytes,file);
+    buffer[bytesRead]=0;
     return bytesRead;
 }
 
@@ -114,9 +112,9 @@ void initFileBuffer(char* newFilename, int size) {
         return;
     }
 
-    stateMapSize = ceil(size/CHUNKSIZE);
-    if(stateMapSize == 0) stateMapSize = 1;
-    int bufferSize = stateMapSize*CHUNKSIZE+1; //+1 por \0? no se
+    stateMapSize = size % CHUNKSIZE==0 ? size/CHUNKSIZE : (size/CHUNKSIZE)+1;
+    int bufferSize = stateMapSize*CHUNKSIZE+1;
+    fileSize = size;
     buffer = malloc(bufferSize);
     stateMap = malloc(stateMapSize*sizeof(StateValue));
     for(int i=0; i<stateMapSize; i++) {
@@ -169,8 +167,8 @@ int retrievedChunk(int chunkNum, char* chunk) {
     if(chunksRetrieved == stateMapSize) {
 
         FILE *newFile;
-        int len = strlen("repository/") + strlen(filename);
-        char *aux = (char *)malloc(len + 1); // Allocate memory for aux
+        int len = strlen("../repository/") + strlen(filename);
+        char *aux = (char *)malloc(len); // Allocate memory for aux
         if (aux == NULL) {
             perror("Unable to allocate memory for aux");
             return 1;
@@ -186,13 +184,7 @@ int retrievedChunk(int chunkNum, char* chunk) {
             return 1;
         }
 
-        if (fprintf(newFile, "%s", buffer) < 0) {
-            perror("Error writing to file");
-            fclose(newFile);
-            free(aux);
-            return 1;
-        }
-
+        fwrite(buffer, 1, fileSize, newFile);
         fclose(newFile);
         free(aux);
 

@@ -236,10 +236,13 @@ void downloadHandler(PARAMS) {
     downloading = true;
 
     struct peerMng* p1 = addPeer(key, argv[1], argv[2]);
+    struct peerMng* p2 = addPeer(key, argv[1], argv[2]);
 
     peers[0].peer = p1;
     peers[0].status = WAITING;
-    activePeers = 1;
+    peers[1].peer = p2;
+    peers[1].status = WAITING;
+    activePeers = 2;
     peersFinished = 0;
     printf("Started Download\n");
 }

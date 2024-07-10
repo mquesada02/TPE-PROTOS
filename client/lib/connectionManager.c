@@ -404,9 +404,7 @@ void peerRead(struct selector_key *key) {
         return;
     }
 
-    printf("Receiving\n");
     ssize_t bytes = recv(key->fd, PEER(key)->responseBuffer, CHUNKSIZE, 0);
-    printf("Done! %s\n", PEER(key)->responseBuffer);
 
     if (bytes > 0) {
         PEER(key)->readReady = true;
