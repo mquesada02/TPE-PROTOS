@@ -2,8 +2,8 @@
 #define FILEMANAGER_H
 
 
-#define CHUNKSIZE 1024
-#define SECTIONSIZE 5*1024*1024 //5MB, tamaño máximo del buffer de descarga
+#define CHUNKSIZE (1024*1024)
+#define SECTIONSIZE (5*CHUNKSIZE) //5MB, tamaño máximo del buffer de descarga
 
 long unsigned int getFileSize(char* md5);
 long copyFromFile(char* buffer,char* md5,long offset, long unsigned int bytes);
@@ -15,6 +15,6 @@ void cancelDownload();
 
 void initFileBuffer(char* newFilename, long unsigned int size);
 int nextChunk();
-int retrievedChunk(int chunkNum, char* chunk);
+int retrievedChunk(unsigned long int chunkNum, char* chunk);
 
 #endif

@@ -18,6 +18,7 @@ enum STATUS {
     READ_READY,
     WAITING,
     BUSY,
+    HOLD,
     DEAD
 };
 
@@ -25,6 +26,7 @@ struct Peer {
     struct peerMng *peer;
     int status;
     int currByte;
+    int holdQuantum;
 };
 
 #define LOGIN "PLAIN"
@@ -108,10 +110,7 @@ void* handleDownload() {
                         }
                         break;
                     case WAITING:
-                        printf("Assigning Peer %d", i);
                         byte = nextChunk();
-                        printf(" Byte: %d\n", byte);
-
                         if (byte == -2) {
                             for (int j = 0; j < activePeers; j++) {
                                 if (peers[i].status == WAITING) {
@@ -130,17 +129,8 @@ void* handleDownload() {
                         }
 
                         else if (byte == -3) {
-
-                            peers[i].peer->killFlag = true;
-                            peers[i].peer = NULL;
-                            peers[i].status = DEAD;
-                            peersFinished++;
-
-                            if (peersFinished == activePeers) {
-                                activePeers = 0;
-                                peersFinished = 0;
-                                downloading = false;
-                            }
+                            peers[i].holdQuantum = 100;
+                            peers[i].status = HOLD;
                             break;
                         }
                         requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE);
@@ -150,6 +140,11 @@ void* handleDownload() {
                     case BUSY:
                         if (peers[i].peer->readReady) {
                             peers[i].status = READ_READY;
+                        }
+                        break;
+                    case HOLD:
+                        if(peers[i].holdQuantum-- <= 0) {
+                            peers[i].status = WAITING;
                         }
                         break;
                     case DEAD:

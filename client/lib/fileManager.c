@@ -163,6 +163,7 @@ void initForNewSection() {
         stateMap[i].timesAttempted = 0;
     }
     memset(buffer, '\0', bufferSize);
+    chunksRetrieved = 0;
 
 }
 
@@ -186,8 +187,8 @@ int nextChunk() {
 }
 
 //funcion para que el cliente le pase al file manager el contenido del byte que consiguio
-int retrievedChunk(int chunkNum, char* chunk) {
-    int stateMapIndex = chunkNum/CHUNKSIZE;
+int retrievedChunk(unsigned long int chunkNum, char* chunk) {
+    int stateMapIndex = ((int)(chunkNum) % SECTIONSIZE)/CHUNKSIZE;
     //no se encontro
     if(chunk == NULL) {
         stateMap[stateMapIndex].timesAttempted++;
@@ -198,14 +199,15 @@ int retrievedChunk(int chunkNum, char* chunk) {
         stateMap[stateMapIndex].state = MISSING;
     }
 
-    memcpy(buffer+chunkNum, chunk, CHUNKSIZE);
+    memcpy(&buffer[chunkNum % SECTIONSIZE], chunk, CHUNKSIZE);
+    printf("Retrieved chunk %d\n", stateMapIndex);
     stateMap[stateMapIndex].state = RETRIEVED;
     chunksRetrieved++;
 
     if(chunksRetrieved == stateMapSize) {
 
         int len = strlen("../repository/") + strlen(filename);
-        char *aux = malloc(len+1); // Allocate memory for aux
+        char *aux = malloc(len + 1); // Allocate memory for aux
         if (aux == NULL) {
             perror("Unable to allocate memory for aux");
             return 1;
@@ -225,23 +227,24 @@ int retrievedChunk(int chunkNum, char* chunk) {
         fclose(newFile);
         free(aux);
 
-        if(sections==0||++currentSection==sections){
-            free((void *)buffer);
+        if (sections == 0 || ++currentSection == sections) {
+            free((void *) buffer);
             buffer = NULL;
             free(stateMap);
             stateMap = NULL;
-            free((void *)filename);
+            free((void *) filename);
             filename = NULL;
             newFile = NULL;
             sections = 0;
             currentSection = 0;
 
             completed = true;
-        } else{
+        } else {
             initForNewSection();
         }
 
     }
+
     return 0;
 }
 
