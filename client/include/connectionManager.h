@@ -32,6 +32,8 @@ void leecherHandler(struct selector_key *key);
 
 struct peerMng * addPeer(struct selector_key *key, char *ip, char *port);
 
-void requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t byteTo);
+int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t byteTo);
+
+int readFromPeer(struct peerMng * peer, char buff[CHUNKSIZE]);
 
 #endif //TPE_PROTOS_CONNECTIONMANAGER_H

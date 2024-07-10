@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "../include/user.h"
 #include "../include/selector.h"
@@ -87,14 +88,17 @@ void parseCommand(char *input, struct selector_key *key) {
 }
 
 void* handleDownload() {
+    char buff[CHUNKSIZE];
     while(true) {
         if (downloading) {
             for (int i = 0; i < activePeers; i++) {
                 int byte = 0;
                 switch (peers[i].status) {
                     case READ_READY:
-                        retrievedChunk(peers[i].currByte, peers[i].peer->responseBuffer);
-                        peers[i].status = WAITING;
+                        if(readFromPeer(peers[i].peer, buff) != -1) {
+                            retrievedChunk(peers[i].currByte, buff);
+                            peers[i].status = WAITING;
+                        }
                         break;
                     case WAITING:
                         printf("Assigning Peer %d", i);

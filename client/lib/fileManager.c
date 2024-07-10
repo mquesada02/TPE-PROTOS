@@ -34,12 +34,12 @@ int chunksRetrieved;
 char* filename = NULL;
 bool completed;
 
-long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
+long copyFromFile(char* buffer,char* md5,long offset, int bytes){
     FILE* file=lookup(map,md5);
     if(file==NULL)
         return -1;
     fseek(file,offset,SEEK_SET);
-    size_t bytesRead=fread(buffer,1,bytes,file);
+    int bytesRead=fread(buffer,1,bytes,file);
     if(bytesRead<bytes){
         buffer[bytesRead]=0;
     }

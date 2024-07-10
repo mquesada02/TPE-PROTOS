@@ -246,7 +246,7 @@ void leecherRead(struct selector_key *key) {
     int byteFrom = atoi(tempByteFrom);
     int byteTo = atoi(tempByteTo);
 
-    long size = byteTo - byteFrom;
+    int size = byteTo - byteFrom;
 
     if (size <= 1)
         goto error;
@@ -257,6 +257,7 @@ void leecherRead(struct selector_key *key) {
 
     ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, size, 0);
     if (sent_bytes <= 0) {
+        perror("Failed to send response\n");
         goto error;
     }
 
@@ -403,7 +404,9 @@ void peerRead(struct selector_key *key) {
         return;
     }
 
+    printf("Receiving\n");
     ssize_t bytes = recv(key->fd, PEER(key)->responseBuffer, CHUNKSIZE, 0);
+    printf("Done! %s\n", PEER(key)->responseBuffer);
 
     if (bytes > 0) {
         PEER(key)->readReady = true;
@@ -426,7 +429,6 @@ void peerWrite(struct selector_key *key) {
         return;
     }
 
-
     if (!PEER(key)->writeReady) {
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
@@ -434,13 +436,13 @@ void peerWrite(struct selector_key *key) {
 
     ssize_t bytes = send(key->fd, PEER(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
 
-    memset(PEER(key)->requestBuffer, '\0', REQUEST_BUFFER_SIZE);
-
     if (bytes <= 0) {
         PEER(key)->killFlag = true;
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
+
+    memset(PEER(key)->requestBuffer, '\0', REQUEST_BUFFER_SIZE);
 
     PEER(key)->writeReady = false;
 
@@ -448,18 +450,34 @@ void peerWrite(struct selector_key *key) {
     selector_set_interest(key->s, key->fd, OP_READ);
 }
 
-void requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t byteTo) {
+int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t byteTo) {
     if (byteTo <= byteFrom + 1) {
-        return;
+        return -1;
     }
-
     pthread_mutex_lock(&peer->mutex);
+
+    if(peer->readReady) {
+        pthread_mutex_unlock(&peer->mutex);
+        return -1;
+    }
 
     snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%d:%d", hash, (int)byteFrom, (int)byteTo);
 
     memset(peer->responseBuffer, 0, sizeof(peer->responseBuffer));
 
     peer->writeReady = true;
-
     pthread_mutex_unlock(&peer->mutex);
+    return 0;
+}
+
+int readFromPeer(struct peerMng * peer, char buff[CHUNKSIZE]) {
+    pthread_mutex_lock(&peer->mutex);
+    if(peer->readReady) {
+        peer->readReady = false;
+        memcpy(buff, peer->responseBuffer, CHUNKSIZE);
+        pthread_mutex_unlock(&peer->mutex);
+        return 0;
+    }
+    pthread_mutex_unlock(&peer->mutex);
+    return -1;
 }
