@@ -27,7 +27,7 @@ typedef struct StateValue {
 } StateValue;
 
 fileMap map;
-int bufferSize = 0;
+long bufferSize = 0;
 char* buffer = NULL;
 int stateMapSize = 0;
 StateValue* stateMap = NULL;
@@ -38,7 +38,7 @@ FILE* newFile;
 bool completed;
 int sections = 0; //tamaño del archivo dividido 5MB
 int currentSection = 0;
-
+long bytesReadPerSection=0;
 long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
     FILE* file=lookup(map,md5);
     if(file==NULL)
@@ -61,6 +61,13 @@ long addFile(char* md5,char* filename){
         return -1;
     insert(map,md5,file);
     return 0;
+}
+unsigned long addBytesRead(long bytes){
+    bytesReadPerSection+=bytes;
+    return bytesReadPerSection;
+}
+unsigned long getBytesRead(){
+    return bytesReadPerSection;
 }
 
 long unsigned int getFileSize(char* md5){
@@ -124,10 +131,10 @@ void initFileBuffer(char* newFilename, long unsigned int size) {
         bufferSize = stateMapSize*CHUNKSIZE+1;
         buffer = malloc(bufferSize);
     } else{
-        buffer = malloc(SECTIONSIZE);
-        bufferSize = SECTIONSIZE;
+        bufferSize = SECTIONSIZE+1;
+        buffer = malloc(bufferSize);
         stateMapSize = SECTIONSIZE/CHUNKSIZE;
-        sections = size % SECTIONSIZE==0? size/SECTIONSIZE : (size/SECTIONSIZE)+1;
+        sections = size % SECTIONSIZE==0 ? size/SECTIONSIZE : (size/SECTIONSIZE)+1;
         currentSection = 0;
     }
     if (buffer == NULL){
@@ -164,6 +171,7 @@ void initForNewSection() {
     }
     memset(buffer, '\0', bufferSize);
     chunksRetrieved = 0;
+    bytesReadPerSection=0;
 
 }
 
@@ -200,7 +208,7 @@ void cancelDownload() {
 
 //deberia llamarse con un while nextChunk()!=-2 (o similar)(?
 //devuelve el indice del principio del chunk que tiene quue buscar
-int nextChunk() {
+long nextChunk() {
 
     if(completed) return -2;
 
@@ -214,7 +222,7 @@ int nextChunk() {
 
     if(i==stateMapSize) return -3;
     stateMap[i].state = OBTAINING;
-    return i*CHUNKSIZE+currentSection*SECTIONSIZE;
+    return (i*CHUNKSIZE)+(currentSection*SECTIONSIZE);
 }
 
 //funcion para que el cliente le pase al file manager el contenido del byte que consiguio
@@ -231,11 +239,7 @@ int retrievedChunk(unsigned long int chunkNum, char* chunk) {
         stateMap[stateMapIndex].state = MISSING;
     }
 
-    if(chunkNum+CHUNKSIZE > fileSize){
-        memcpy(&buffer[chunkNum % SECTIONSIZE], chunk, fileSize-chunkNum);
-    } else{
-        memcpy(&buffer[chunkNum % SECTIONSIZE], chunk, CHUNKSIZE);
-    }
+    memcpy(buffer+(chunkNum % SECTIONSIZE), chunk, CHUNKSIZE);
     printf("Retrieved chunk %d\n", stateMapIndex);
     stateMap[stateMapIndex].state = RETRIEVED;
     chunksRetrieved++;
@@ -259,12 +263,7 @@ int retrievedChunk(unsigned long int chunkNum, char* chunk) {
             return 1;
         }
 
-        size_t auxSize = bufferSize;
-
-        if(sections == currentSection + 1) {
-            auxSize = fileSize % SECTIONSIZE;
-        }
-        fwrite(buffer, 1, auxSize, newFile);
+        fwrite(buffer, 1, bytesReadPerSection, newFile);
         fclose(newFile);
         free(aux);
 
