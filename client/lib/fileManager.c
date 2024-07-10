@@ -59,7 +59,7 @@ long addFile(char* md5,char* filename){
     return 0;
 }
 
-long getFileSize(char* md5){
+long unsigned int getFileSize(char* md5){
     FILE* file=lookup(map,md5);
     if(file==NULL)
         return -1;
@@ -106,14 +106,14 @@ void endFileManager(){
 }
 
 //inicializa todas las variables para poder ir juntando los chinks del archivo
-void initFileBuffer(char* newFilename, int size) {
+void initFileBuffer(char* newFilename, long unsigned int size) {
     if(buffer){
         perror("A file is already being downloaded.");
         return;
     }
 
     stateMapSize = size % CHUNKSIZE==0 ? size/CHUNKSIZE : (size/CHUNKSIZE)+1;
-    int bufferSize = stateMapSize*CHUNKSIZE+1;
+    long unsigned int bufferSize = stateMapSize*CHUNKSIZE+1;
     fileSize = size;
     buffer = malloc(bufferSize);
     stateMap = malloc(stateMapSize*sizeof(StateValue));
