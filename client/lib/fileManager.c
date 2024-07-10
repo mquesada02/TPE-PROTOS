@@ -98,6 +98,7 @@ long initializeFileManager(){
             }
         }
     }
+    closedir(dir);
     return 0;
 }
 
