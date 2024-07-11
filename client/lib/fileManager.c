@@ -283,7 +283,7 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
         fclose(newFile);
         free(aux);
 
-        if (sections == 0 || currentSection++ == sections) {
+        if (sections == 0 || ++currentSection == sections) {
             free((void *) buffer);
             buffer = NULL;
             free(stateMap);

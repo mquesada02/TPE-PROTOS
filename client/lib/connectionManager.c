@@ -250,8 +250,9 @@ void leecherRead(struct selector_key *key) {
     size_t byteFrom = atol(tempByteFrom);
     size_t byteTo = atol(tempByteTo);
 
-    if (byteTo< byteFrom)
+    if (byteTo < byteFrom)
         goto error;
+
     size_t size = byteTo - byteFrom;
 
     if (size > CHUNKSIZE) {
