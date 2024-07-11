@@ -150,7 +150,7 @@ int main(int argc,char ** argv){
         goto finally;
     }
 
-    ss = selector_register(selector, leekerSocket, &leeker, OP_READ, NULL);
+    ss = selector_register(selector, leekerSocket, &leeker, OP_READ, &args);
     if (ss != SELECTOR_SUCCESS) {
         err_msg = "Unable to register FD for IPv4/IPv6.";
         goto finally;

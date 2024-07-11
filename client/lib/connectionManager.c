@@ -13,6 +13,7 @@
 #include "../include/user.h"
 #include "../include/fileManager.h"
 #include "../include/connectionManager.h"
+#include "../include/args.h"
 
 #define SUCCESS 1
 #define ERROR (-1)
@@ -25,9 +26,11 @@
 #define MAXPENDING 32
 
 static char addrBuffer[MAX_ADDR_BUFFER];
+int connections = 0;
 
-#define LEECH(key) ( (struct leecherMng *)(key)->data)
-#define PEER(key) ( (struct peerMng *)(key)->data)
+#define LEECH(key) ( (struct leecherMng *)(key)->data )
+#define PEER(key) ( (struct peerMng *)(key)->data )
+#define ARGS(key) ( (struct clientArgs *)(key)->data )
 
 void leecherRead(struct selector_key *key);
 void leecherWrite(struct selector_key *key);
@@ -168,15 +171,18 @@ int setupLeecherSocket(const char *service, const char **errmsg) {
 
 void leecherHandler(struct selector_key *key) {
 
-    struct sockaddr_storage leekerAddr;
-    socklen_t leekerAddrLen = sizeof(leekerAddr);
+    struct sockaddr_storage leecherAddr;
+    socklen_t leecherAddrLen = sizeof(leecherAddr);
     struct leecherMng * mng = NULL;
 
-    const int leeker = accept(key->fd, (struct sockaddr*) &leekerAddr, &leekerAddrLen);
-    if(leeker == -1) {
+    int leecher = -1;
+    if(connections < ARGS(key)->conectionLimit || ARGS(key)->conectionLimit == 0) {
+        leecher = accept(key->fd, (struct sockaddr*) &leecherAddr, &leecherAddrLen);
+    }
+    if(leecher == -1) {
         goto fail;
     }
-    if(selector_fd_set_nio(leeker) == -1) {
+    if(selector_fd_set_nio(leecher) == -1) {
         goto fail;
     }
 
@@ -189,15 +195,17 @@ void leecherHandler(struct selector_key *key) {
     memset(mng, 0, sizeof(*mng));
 
 
-    if(SELECTOR_SUCCESS != selector_register(key->s, leeker, &leechersHandler, OP_READ, mng)) {
+    if(SELECTOR_SUCCESS != selector_register(key->s, leecher, &leechersHandler, OP_READ, mng)) {
         goto fail;
     }
+
+    connections++;
 
     return;
 
     fail:
-    if(leeker != -1) {
-        close(leeker);
+    if(leecher != -1) {
+        close(leecher);
     }
     if(mng != NULL) {
         free(mng);
@@ -205,6 +213,7 @@ void leecherHandler(struct selector_key *key) {
 }
 
 static void quit(struct selector_key *key) {
+    connections--;
     send(key->fd, CLOSE_MSG, strlen(CLOSE_MSG), 0);
     close(key->fd);
     free(LEECH(key));

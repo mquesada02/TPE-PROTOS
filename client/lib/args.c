@@ -46,7 +46,7 @@ static void usage(const char *progname) {
         "Usage: %s [OPTION]...\n"
         "\n"
         "   -h               Imprime la ayuda y termina.\n"
-        "   -l <addr>        Dirección donde servirá el servidor SMTP.\n"
+        "   -l <addr>        Dirección donde servirá el servidor.\n"
         "   -P <con port>    Puerto entrante para conexiones.\n"
         "   -u <name>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
         "   -N <limit>       Limite de conexiones a aceptar \n"
