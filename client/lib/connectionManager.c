@@ -416,7 +416,10 @@ int setupPeerSocket(const char *ip, const char *port) {
 struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
     int socket = 0;
     socket = setupPeerSocket(ip, port);
-
+    if(socket==-1){
+        perr("Failed to connect to peer");
+        goto fail;
+    }
     struct peerMng * mng = NULL;
 
     mng = initializePeerMng();
