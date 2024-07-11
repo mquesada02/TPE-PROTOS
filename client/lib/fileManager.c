@@ -124,13 +124,13 @@ void endFileManager(){
 }
 
 char* getFilenamePath(){
-    int len = strlen("../repository/") + strlen(filename);
+    int len = strlen("../downloads/") + strlen(filename);
     char* aux = malloc(len+1); // Allocate memory for aux
     if (aux == NULL) {
         perror("Unable to allocate memory for aux");
         return NULL;
     }
-    strcpy(aux, "../repository/");
+    strcpy(aux, "../downloads/");
     strcat(aux, filename);
     aux[len] = '\0';
 
@@ -143,13 +143,11 @@ void initFileBuffer(char* newFilename, size_t size) {
         perror("A file is already being downloaded.");
         return;
     }
-
-    char* aux = getFilenamePath();
-    int fd = open(aux, O_CREAT|O_EXCL);
-    if(fd<0 && errno==EEXIST) {
+    filename = malloc(strlen(newFilename)+1);
+    strcpy(filename, newFilename);
+    char* aux = getFilenamePath(); 
+    if(access(aux, F_OK) == 0) {
         remove(aux); //elimina el archivo si ya existía para reemplazarlo
-    } else{
-        close(fd);
     }
     free(aux);
 
@@ -180,8 +178,6 @@ void initFileBuffer(char* newFilename, size_t size) {
         stateMap[i].timesAttempted = 0;
     }
     memset(buffer, '\0', bufferSize);
-    filename = malloc(strlen(newFilename)+1);
-    strcpy(filename, newFilename);
     chunksRetrieved = 0;
     completed = false;
 }

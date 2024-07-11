@@ -69,7 +69,7 @@ void* registerFiles(void *vkey) {
                 length = sprintf(buffer, "REGISTER %s %d %s\n", dirnt->d_name, size, md5Buffer);
                 if (sendto(tracker->socket, buffer, length, 0, (struct sockaddr*)tracker->trackerAddr, sizeof(struct sockaddr_in)) <= 0)
                     printf("Error\n");
-                recvfrom(tracker->socket, buffer, MAX_STRING_LENGTH, 0, (struct sockaddr *)tracker->trackerAddr, (socklen_t *) sizeof(struct sockaddr_in));
+                //recvfrom(tracker->socket, buffer, MAX_STRING_LENGTH, 0, (struct sockaddr *)tracker->trackerAddr, (socklen_t *) sizeof(struct sockaddr_in));
             }
         }
         closedir(dir);

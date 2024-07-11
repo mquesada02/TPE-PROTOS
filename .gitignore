@@ -8,3 +8,4 @@ client/client
 tracker/tracker
 repository/*
 tracker/auth/*
+downloads/*
