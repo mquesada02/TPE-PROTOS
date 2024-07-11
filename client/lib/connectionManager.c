@@ -199,6 +199,7 @@ void leecherHandler(struct selector_key *key) {
 
 static void quit(struct selector_key *key) {
     send(key->fd, CLOSE_MSG, strlen(CLOSE_MSG), 0);
+    free(LEECH(key));
     close(key->fd);
     selector_unregister_fd(key->s, key->fd);
 }
