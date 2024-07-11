@@ -28,7 +28,8 @@ static char addrBuffer[MAX_ADDR_BUFFER];
 #define PEER(key) ( (struct peerMng *)(key)->data)
 
 void leecherRead(struct selector_key *key);
-//void leecherWrite(struct selector_key *key);
+void leecherWrite(struct selector_key *key);
+static void quit(struct selector_key *key);
 void peerRead(struct selector_key *key);
 void peerWrite(struct selector_key *key);
 void cleanupPeerMng(struct peerMng *peer);
@@ -37,14 +38,18 @@ struct leecherMng {
 
     char requestBuffer[REQUEST_BUFFER_SIZE];
 
-    char * responseBuffer;
+    char responseBuffer[CHUNKSIZE + 1];
+
+    char hash[33];
+    size_t byteFrom;
+    size_t size;
 
 };
 
 static const struct fd_handler leechersHandler = {
         .handle_read   = leecherRead,
-        .handle_write  = NULL,
-        .handle_close  = NULL,
+        .handle_write  = leecherWrite,
+        .handle_close  = quit,
         .handle_block  = NULL,
 };
 
@@ -199,9 +204,8 @@ void leecherHandler(struct selector_key *key) {
 
 static void quit(struct selector_key *key) {
     send(key->fd, CLOSE_MSG, strlen(CLOSE_MSG), 0);
-    free(LEECH(key));
     close(key->fd);
-    selector_unregister_fd(key->s, key->fd);
+    free(LEECH(key));
 }
 
 
@@ -212,12 +216,11 @@ void leecherRead(struct selector_key *key) {
     ssize_t bytes = recv(key->fd, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
 
     if(bytes == 0) {
-        quit(key);
+        selector_unregister_fd(key->s, key->fd);
         return;
     }
 
     //HASH:BYTE_FROM:BYTE_TO
-    char hash[256];
     char tempByteFrom[256];
     char tempByteTo[256];
 
@@ -225,7 +228,7 @@ void leecherRead(struct selector_key *key) {
     char *token = strtok(LEECH(key)->requestBuffer, ":");
     if (token == NULL)
         goto error;
-    strcpy(hash, token);
+    strcpy(LEECH(key)->hash, token);
 
     token = strtok(NULL, ":");
     if (token == NULL)
@@ -251,10 +254,25 @@ void leecherRead(struct selector_key *key) {
         goto error;
     size_t size = byteTo - byteFrom;
 
+    if (size > CHUNKSIZE) {
+        size = CHUNKSIZE;
+    }
 
-    LEECH(key)->responseBuffer = malloc(size + 1);
+    LEECH(key)->size = size;
+    LEECH(key)->byteFrom = byteFrom;
+
+    selector_set_interest(key->s, key->fd, OP_WRITE);
+
+    return;
+
+    error:
+    selector_unregister_fd(key->s, key->fd);
+    printf("Roto todo\n");
+}
+
+void leecherWrite(struct selector_key *key) {
     int statusCode;
-    size_t bytesRead=copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size,&statusCode);
+    size_t bytesRead = copyFromFile(LEECH(key)->responseBuffer, LEECH(key)->hash, LEECH(key)->byteFrom, LEECH(key)->size, &statusCode);
     if(statusCode!=FILE_SUCCESS){
         perror("Error reading file");
         goto error;
@@ -262,15 +280,16 @@ void leecherRead(struct selector_key *key) {
 
     ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, bytesRead, 0);
     if (sent_bytes <= 0) {
-        perror("Failed to send response\n");
+        perror("Failed to send response");
         goto error;
     }
 
-    free(LEECH(key)->responseBuffer);
+    selector_set_interest(key->s, key->fd, OP_READ);
+
     return;
 
     error:
-    quit(key);
+    selector_unregister_fd(key->s, key->fd);
     printf("Roto todo\n");
 }
 
@@ -416,12 +435,13 @@ void peerRead(struct selector_key *key) {
         addBytesRead(bytes);
     } else {
         PEER(key)->killFlag = true;
+        perror("Failed to connect (recv) to seeder");
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
 
-    pthread_mutex_unlock(&PEER(key)->mutex);
     selector_set_interest(key->s, key->fd, OP_WRITE);
+    pthread_mutex_unlock(&PEER(key)->mutex);
 }
 
 void peerWrite(struct selector_key *key) {
@@ -433,7 +453,7 @@ void peerWrite(struct selector_key *key) {
         return;
     }
 
-    if (!PEER(key)->writeReady) {
+    if (!PEER(key)->writeReady || PEER(key)->readReady) {
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
@@ -442,6 +462,7 @@ void peerWrite(struct selector_key *key) {
 
     if (bytes <= 0) {
         PEER(key)->killFlag = true;
+        perror("Failed to connect (send) to seeder");
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
@@ -458,10 +479,8 @@ int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t b
     if (byteTo <= byteFrom + 1) {
         return -1;
     }
-    pthread_mutex_lock(&peer->mutex);
 
     if(peer->readReady) {
-        pthread_mutex_unlock(&peer->mutex);
         return -1;
     }
 
@@ -469,18 +488,14 @@ int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t b
     memset(peer->responseBuffer, 0, sizeof(peer->responseBuffer));
 
     peer->writeReady = true;
-    pthread_mutex_unlock(&peer->mutex);
     return 0;
 }
 
 int readFromPeer(struct peerMng * peer, char buff[CHUNKSIZE]) {
-    pthread_mutex_lock(&peer->mutex);
     if(peer->readReady) {
         peer->readReady = false;
         memcpy(buff, peer->responseBuffer, CHUNKSIZE);
-        pthread_mutex_unlock(&peer->mutex);
         return 0;
     }
-    pthread_mutex_unlock(&peer->mutex);
     return -1;
 }

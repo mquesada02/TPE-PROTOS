@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <math.h>
+#include <pthread.h>
 
 #include "../include/utils.h"
 #include "../include/fileMap.h"
@@ -39,6 +40,8 @@ bool completed;
 size_t sections = 0; //tamaño del archivo dividido 5MB
 size_t currentSection = 0;
 size_t bytesReadPerSection;
+
+
 size_t copyFromFile(char* buffer,char* md5,size_t offset,size_t bytes,int* statusCode){
     FILE* file=lookup(map,md5);
     if(file==NULL){
@@ -46,8 +49,8 @@ size_t copyFromFile(char* buffer,char* md5,size_t offset,size_t bytes,int* statu
         return 0;
     }
     fseek(file,offset,SEEK_SET);
-    size_t bytesRead=fread(buffer,1,bytes,file);
-    buffer[bytesRead]=0;
+    size_t bytesRead = fread(buffer,1,bytes,file);
+    buffer[bytesRead] = 0;
     *statusCode=FILE_SUCCESS;
     return bytesRead;
 }
@@ -211,9 +214,10 @@ void cancelDownload() {
 
 //deberia llamarse con un while nextChunk()!=-2 (o similar)(?
 //devuelve el indice del principio del chunk que tiene quue buscar
-size_t nextChunk() {
-
-    if(completed) return -2;
+int nextChunk(size_t *byte) {
+    if(completed) {
+        return -2;
+    }
 
     if(buffer == NULL) {
         perror("Must initialize File Buffer first");
@@ -223,9 +227,12 @@ size_t nextChunk() {
     size_t i = 0;
     while(i<stateMapSize && stateMap[i].state != MISSING) i++;
 
-    if(i==stateMapSize) return -3;
+    if(i==stateMapSize) {
+        return -3;
+    }
     stateMap[i].state = OBTAINING;
-    return (i*CHUNKSIZE)+(currentSection*SECTIONSIZE);
+    *byte = (i*CHUNKSIZE)+(currentSection*SECTIONSIZE);
+    return 0;
 }
 
 //funcion para que el cliente le pase al file manager el contenido del byte que consiguio
@@ -243,7 +250,7 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
     }
 
     memcpy(buffer+(chunkNum % SECTIONSIZE), chunk, CHUNKSIZE);
-    printf("Retrieved chunk %lu\n", stateMapIndex);
+    printf("Retrieved chunk %lu || Byte (%lu - %lu)\n", stateMapIndex, chunkNum, chunkNum + CHUNKSIZE - 1);
     stateMap[stateMapIndex].state = RETRIEVED;
     chunksRetrieved++;
 
@@ -266,11 +273,17 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
             return 1;
         }
 
-        fwrite(buffer, 1, bytesReadPerSection, newFile);
+        size_t auxSize = bufferSize;
+
+        if(sections == 0 || sections == currentSection + 1) {
+            auxSize = fileSize % SECTIONSIZE;
+        }
+
+        fwrite(buffer, 1, auxSize, newFile);
         fclose(newFile);
         free(aux);
 
-        if (sections == 0 || ++currentSection == sections) {
+        if (sections == 0 || currentSection++ == sections) {
             free((void *) buffer);
             buffer = NULL;
             free(stateMap);
@@ -287,7 +300,6 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
         }
 
     }
-
     return 0;
 }
 

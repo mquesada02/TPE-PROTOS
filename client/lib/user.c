@@ -18,15 +18,13 @@ enum STATUS {
     READ_READY,
     WAITING,
     BUSY,
-    HOLD,
     DEAD
 };
 
 struct Peer {
     struct peerMng *peer;
     int status;
-    int currByte;
-    int holdQuantum;
+    size_t currByte;
 };
 
 #define LOGIN "PLAIN"
@@ -98,24 +96,30 @@ void parseCommand(char *input, struct selector_key *key) {
 
 void* handleDownload() {
     char buff[CHUNKSIZE];
+    int val;
     while(true) {
         if (downloading && !paused) {
             for (int i = 0; i < activePeers; i++) {
-                int byte = 0;
+                size_t byte = 0;
+
                 switch (peers[i].status) {
                     case READ_READY:
+                        pthread_mutex_lock(&peers[i].peer->mutex);
                         memset(buff,0,CHUNKSIZE);
                         if(readFromPeer(peers[i].peer, buff) != -1) {
                             retrievedChunk(peers[i].currByte, buff);
                             peers[i].status = WAITING;
                         }
+                        pthread_mutex_unlock(&peers[i].peer->mutex);
                         break;
                     case WAITING:
-                        byte = nextChunk();
-                        if (byte == -2) {
+                        pthread_mutex_lock(&peers[i].peer->mutex);
+                        val = nextChunk(&byte);
+                        if (val == -2) {
                             for (int j = 0; j < activePeers; j++) {
                                 if (peers[j].status == WAITING) {
                                     peers[j].peer->killFlag = true;
+                                    pthread_mutex_unlock(&peers[i].peer->mutex);
                                     peers[j].peer = NULL;
                                     peers[j].status = DEAD;
                                     peersFinished++;
@@ -129,27 +133,29 @@ void* handleDownload() {
                             break;
                         }
 
-                        else if (byte == -3) {
-                            peers[i].holdQuantum = 100;
-                            peers[i].status = HOLD;
+                        else if (val == -3) {
+                            pthread_mutex_unlock(&peers[i].peer->mutex);
                             break;
                         }
-                        requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE);
+                        if(requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE) == -1) {
+                            peers[i].status = READ_READY;
+                        }
                         peers[i].currByte = byte;
                         peers[i].status = BUSY;
+                        pthread_mutex_unlock(&peers[i].peer->mutex);
                         break;
                     case BUSY:
+                        pthread_mutex_lock(&peers[i].peer->mutex);
+                        if (peers[i].peer->killFlag) {
+                            perror("WTF");
+                            return 0;
+                        }
                         if (peers[i].peer->readReady) {
                             peers[i].status = READ_READY;
                         }
-                        break;
-                    case HOLD:
-                        if(peers[i].holdQuantum-- <= 0) {
-                            peers[i].status = WAITING;
-                        }
+                        pthread_mutex_unlock(&peers[i].peer->mutex);
                         break;
                     case DEAD:
-                        //TODO handle dead
                         break;
                 }
             }
@@ -246,7 +252,7 @@ void downloadHandler(PARAMS) {
     //TODO pedir el tamaño del archivo del tracker, pedir los peers y armarlos
     strncpy(fileHash, argv[3], 32);
 
-    initFileBuffer("esto_es_de_manu.txt", getFileSize(fileHash));
+    initFileBuffer(fileHash, getFileSize(fileHash));
 
 
     downloading = true;
