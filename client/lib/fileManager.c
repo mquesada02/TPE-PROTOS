@@ -27,29 +27,32 @@ typedef struct StateValue {
 } StateValue;
 
 fileMap map;
-long bufferSize = 0;
+size_t bufferSize = 0;
 char* buffer = NULL;
-int stateMapSize = 0;
+size_t stateMapSize = 0;
 StateValue* stateMap = NULL;
-int chunksRetrieved;
+size_t chunksRetrieved;
 char* filename = NULL;
 size_t fileSize = 0;
 FILE* newFile;
 bool completed;
-int sections = 0; //tamaño del archivo dividido 5MB
-int currentSection = 0;
-long bytesReadPerSection;
-long copyFromFile(char* buffer,char* md5,long offset,unsigned long bytes){
+size_t sections = 0; //tamaño del archivo dividido 5MB
+size_t currentSection = 0;
+size_t bytesReadPerSection;
+size_t copyFromFile(char* buffer,char* md5,size_t offset,size_t bytes,int* statusCode){
     FILE* file=lookup(map,md5);
-    if(file==NULL)
-        return -1;
+    if(file==NULL){
+        *statusCode=FILE_ERROR_READING;
+        return 0;
+    }
     fseek(file,offset,SEEK_SET);
     size_t bytesRead=fread(buffer,1,bytes,file);
     buffer[bytesRead]=0;
+    *statusCode=FILE_SUCCESS;
     return bytesRead;
 }
 
-long addFile(char* md5,char* filename){
+int addFile(char* md5,char* filename){
     FILE* file=lookup(map,md5);
     if(file!=NULL)
         return 1;
@@ -62,31 +65,31 @@ long addFile(char* md5,char* filename){
     insert(map,md5,file);
     return 0;
 }
-unsigned long addBytesRead(long bytes){
+size_t addBytesRead(size_t bytes){
     bytesReadPerSection+=bytes;
     return bytesReadPerSection;
 }
-unsigned long getBytesRead(){
+size_t getBytesRead(){
     return bytesReadPerSection;
 }
 
-long unsigned int getFileSize(char* md5){
+size_t getFileSize(char* md5){
     FILE* file=lookup(map,md5);
     if(file==NULL)
         return -1;
-    long current=ftell(file);
+    size_t current=ftell(file);
     fseek(file,0,SEEK_END);
-    long size=ftell(file);
+    size_t size=ftell(file);
     fseek(file,current,SEEK_SET);
     return size;
 }
 
-long removeFile(char* md5){
+int removeFile(char* md5){
     return removeEntry(map,md5);
 }
 
 
-long initializeFileManager(){
+int initializeFileManager(){
     map=createMap();
     if(map==NULL)
         return -1;
@@ -118,7 +121,7 @@ void endFileManager(){
 }
 
 //inicializa todas las variables para poder ir juntando los chinks del archivo
-void initFileBuffer(char* newFilename, long unsigned int size) {
+void initFileBuffer(char* newFilename, size_t size) {
     if(buffer){
         perror("A file is already being downloaded.");
         return;
@@ -142,7 +145,7 @@ void initFileBuffer(char* newFilename, long unsigned int size) {
         return;
     }
     stateMap = malloc(stateMapSize*sizeof(StateValue));
-    for(int i=0; i<stateMapSize; i++) {
+    for(size_t i=0; i<stateMapSize; i++) {
         stateMap[i].state = MISSING;
         stateMap[i].timesAttempted = 0;
     }
@@ -156,7 +159,7 @@ void initFileBuffer(char* newFilename, long unsigned int size) {
 void initForNewSection() {
 
     if(currentSection == sections-1){
-        int lastSection = fileSize%SECTIONSIZE;
+        size_t lastSection = fileSize%SECTIONSIZE;
         stateMapSize = lastSection % CHUNKSIZE==0 ? lastSection/CHUNKSIZE : (lastSection/CHUNKSIZE)+1;
         bufferSize = stateMapSize*CHUNKSIZE+1;
         free(stateMap);
@@ -165,7 +168,7 @@ void initForNewSection() {
         buffer =  malloc(bufferSize);
     }
 
-    for(int i=0; i<stateMapSize; i++) {
+    for(size_t i=0; i<stateMapSize; i++) {
         stateMap[i].state = MISSING;
         stateMap[i].timesAttempted = 0;
     }
@@ -208,7 +211,7 @@ void cancelDownload() {
 
 //deberia llamarse con un while nextChunk()!=-2 (o similar)(?
 //devuelve el indice del principio del chunk que tiene quue buscar
-long nextChunk() {
+size_t nextChunk() {
 
     if(completed) return -2;
 
@@ -217,7 +220,7 @@ long nextChunk() {
         return -1;
     }
 
-    int i = 0;
+    size_t i = 0;
     while(i<stateMapSize && stateMap[i].state != MISSING) i++;
 
     if(i==stateMapSize) return -3;
@@ -226,8 +229,8 @@ long nextChunk() {
 }
 
 //funcion para que el cliente le pase al file manager el contenido del byte que consiguio
-int retrievedChunk(unsigned long int chunkNum, char* chunk) {
-    int stateMapIndex = ((chunkNum) % SECTIONSIZE)/CHUNKSIZE;
+int retrievedChunk(size_t chunkNum, char* chunk) {
+    size_t stateMapIndex = ((chunkNum) % SECTIONSIZE)/CHUNKSIZE;
     //no se encontro
     if(chunk == NULL) {
         stateMap[stateMapIndex].timesAttempted++;
@@ -240,7 +243,7 @@ int retrievedChunk(unsigned long int chunkNum, char* chunk) {
     }
 
     memcpy(buffer+(chunkNum % SECTIONSIZE), chunk, CHUNKSIZE);
-    printf("Retrieved chunk %d\n", stateMapIndex);
+    printf("Retrieved chunk %lu\n", stateMapIndex);
     stateMap[stateMapIndex].state = RETRIEVED;
     chunksRetrieved++;
 

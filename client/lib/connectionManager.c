@@ -244,17 +244,21 @@ void leecherRead(struct selector_key *key) {
     //if (!isValidNumber(tempByteFrom) || !isValidNumber(tempByteTo))
     //    goto error;
 
-    long byteFrom = atol(tempByteFrom);
-    long byteTo = atol(tempByteTo);
+    size_t byteFrom = atol(tempByteFrom);
+    size_t byteTo = atol(tempByteTo);
 
-    long size = byteTo - byteFrom;
-
-    if (size <= 1)
+    if (byteTo< byteFrom)
         goto error;
+    size_t size = byteTo - byteFrom;
+
 
     LEECH(key)->responseBuffer = malloc(size + 1);
-
-    long bytesRead=copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size);
+    int statusCode;
+    size_t bytesRead=copyFromFile(LEECH(key)->responseBuffer, hash, byteFrom, size,&statusCode);
+    if(statusCode!=FILE_SUCCESS){
+        perror("Error reading file");
+        goto error;
+    }
 
     ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, bytesRead, 0);
     if (sent_bytes <= 0) {
