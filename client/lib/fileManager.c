@@ -221,12 +221,6 @@ void cancelDownload() {
         free(stateMap);
         stateMap = NULL;
     }
-    if(newFile && filename){
-        char* aux = getFilenamePath();
-        remove(aux);
-        newFile = NULL;
-        free(aux);
-    }
     if(filename){
         free(filename);
         filename = NULL;

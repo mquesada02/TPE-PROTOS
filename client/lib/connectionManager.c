@@ -294,7 +294,6 @@ void leecherWrite(struct selector_key *key) {
     size_t totalBytesSent = 0;
     while (totalBytesSent < bytesRead) {
         size_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer + totalBytesSent, bytesRead - totalBytesSent, 0);
-        printf("Sent %lu Bytes\n", sent_bytes);
         if (sent_bytes <= 0) {
             perror("Failed to send response");
             goto error;

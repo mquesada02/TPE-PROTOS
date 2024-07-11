@@ -7,7 +7,7 @@
 
 typedef enum FileSuccess{FILE_SUCCESS,FILE_MISSING,FILE_ERROR_READING} FileSuccess;
 
-#define CHUNKSIZE (size_t)(512*1024)
+#define CHUNKSIZE (size_t)(32*1024)
 #define SECTIONSIZE (size_t)(64*CHUNKSIZE)
 
 size_t getFileSize(char* md5);

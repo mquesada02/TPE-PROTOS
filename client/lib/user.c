@@ -256,7 +256,8 @@ void downloadHandler(PARAMS) {
     //TODO pedir el tamaño del archivo del tracker, pedir los peers y armarlos
     strncpy(fileHash, argv[3], 32);
 
-    initFileBuffer(fileHash, getFileSize(fileHash));
+    //TODO HACERLO BIEN A ESTO!!
+    initFileBuffer(fileHash, 1337163327);
 
 
     downloading = true;
@@ -282,6 +283,7 @@ void pauseHandler(PARAMS) {
     }
     printf("Nothing to Pause\n");
 }
+
 void resumeHandler(PARAMS) {
     if(downloading && paused) {
         paused = false;
@@ -290,6 +292,7 @@ void resumeHandler(PARAMS) {
     }
     printf("Nothing to Resume\n");
 }
+
 void cancelHandler(PARAMS) {
     if(downloading) {
         paused = true;
