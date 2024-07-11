@@ -24,4 +24,8 @@ int loginUser(char * username, char * password);
 
 void registerUser(char * username, char * password);
 
+void freeFileList();
+
+void freeUsers();
+
 #endif

@@ -79,7 +79,7 @@ void parse_args(const int argc, char **argv, struct clientArgs *args) {
             { 0,           0,                 0, 0 }
         };
 
-        c = getopt_long(argc, argv, "hl:L:P:u:vN:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hl:L:t:T:l:P:u:vN:", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -92,6 +92,12 @@ void parse_args(const int argc, char **argv, struct clientArgs *args) {
                 break;
             case 'L':
                 args->leecherSocksPort = port(optarg);
+                break;
+            case 't':
+                args->trackerSocksAddr = optarg;
+                break;
+            case 'T':
+                args->trackerSocksPort = port(optarg);
                 break;
             case 'P':
                 args->mng_port   = port(optarg);

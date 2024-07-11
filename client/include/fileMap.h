@@ -2,6 +2,8 @@
 #define __FILEMAP_H_
 #include <stdio.h>
 
+#define TABLE_SIZE 100
+
 typedef struct hashMap* fileMap;
 
 

@@ -17,6 +17,19 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/udp.h>
+#include <arpa/inet.h>
+
+#include <dirent.h>
+#include <sys/stat.h>
+
+#define REPO_PATH "../repository"
+#define PATH_SIZE 1024
+#define DT_REG 8 //redefinido pues no es reconocido por alguna razon
+
+#define INT_LENGTH 10
+
+#define QUANTUM 15
+
 
 
 #define MAX_REQUESTS 20
@@ -31,6 +44,40 @@ static void sigterm_handler(const int signal) {
     printf("Signal %d, cleaning up and exiting\n",signal);
     done = true;
 }
+
+void* registerFiles(void *vkey) {
+    signal(SIGTERM, sigterm_handler);
+    signal(SIGINT, sigterm_handler);
+    struct Tracker * tracker = (struct Tracker *) vkey;
+    while(!done) {
+        struct dirent* dirnt;
+        DIR* dir;
+        char pathname[PATH_SIZE];
+        if((dir=opendir(REPO_PATH))==NULL){
+            return NULL;
+        }
+        while((dirnt=readdir(dir))){
+            if(dirnt->d_type == DT_REG ){
+                char md5Buffer[MD5_SIZE+1];
+                sprintf(pathname,"%s/%s",REPO_PATH,dirnt->d_name);
+                calculateMD5(pathname,md5Buffer);
+                int length = MD5_SIZE+strlen("REGISTER")+strlen(dirnt->d_name)+INT_LENGTH+4;
+                char buffer[length];
+                struct stat st;
+                stat(pathname, &st);
+                int size = st.st_size;
+                length = sprintf(buffer, "REGISTER %s %d %s\n", dirnt->d_name, size, md5Buffer);
+                if (sendto(tracker->socket, buffer, length, 0, (struct sockaddr*)tracker->trackerAddr, sizeof(struct sockaddr_in)) <= 0)
+                    printf("Error\n");
+                recvfrom(tracker->socket, buffer, MAX_STRING_LENGTH, 0, (struct sockaddr *)tracker->trackerAddr, (socklen_t *) sizeof(struct sockaddr_in));
+            }
+        }
+        closedir(dir);
+        sleep(QUANTUM);
+    }
+    return NULL;
+}
+
 
 int main(int argc,char ** argv){
     unsigned int port = 15555;
@@ -113,6 +160,11 @@ int main(int argc,char ** argv){
 
     pthread_create(&tid, NULL, handleDownload, NULL);
     pthread_detach(tid);
+
+    pthread_t updateTID;
+
+    pthread_create(&updateTID, NULL, registerFiles, (void*) tracker);
+    pthread_detach(updateTID);
 
     while(!done) {
         err_msg = NULL;

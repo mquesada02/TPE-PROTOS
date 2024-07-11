@@ -147,6 +147,8 @@ int main(int argc,char ** argv){
   if (socket >= 0)
     close(socket);
   fclose(users);
+  freeUsers();
+  freeFileList();
   return 0;
 }
 
@@ -216,6 +218,8 @@ FileList * _removeFile(FileList * file, char * MD5) {
   if (file == NULL) return file;
   if (strcmp(file->file->MD5,MD5) == 0) {
     FileList * aux = file->next;
+    if (file->file)
+      free(file->file);
     free(file);
     return aux;
   }
@@ -397,6 +401,38 @@ bool userFind(UserState * user, char * ip, char * port) {
   return userFind(user->next, ip, port);
 }
 
+void _freeUsers(UserState * node) {
+  if(node == NULL) return;
+  _freeUsers(node->next);
+  free(node);
+}
+
+void freeUsers() {
+  if (state == NULL) return;
+  _freeUsers(state->first);
+}
+
+void freeUserNode(UserNode * node) {
+  if(node == NULL) return;
+  freeUserNode(node->next);
+  free(node);
+}
+
+void _freeFileList(FileList * node) {
+  if (node == NULL) return;
+  if (node->file) {
+    freeUserNode(node->file->seeders);
+    freeUserNode(node->file->leechers);
+    free(node->file);
+  }
+  _freeFileList(node->next);
+  free(node);
+}
+
+void freeFileList() {
+  _freeFileList(fileList);
+}
+
 UserNode * _addLeecher(UserNode * node, char * username) {
   int cmp;
   if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
@@ -468,8 +504,8 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       char * password = strtok(NULL, "\n");
       int loginState = 0;
       if ((loginState = loginUser(user, password))) {
-        if (state == NULL)
-          state = malloc(sizeof(struct TrackerState));
+        if (state == NULL) 
+          state = calloc(1,sizeof(struct TrackerState));
         UserState node = (UserState) {.next = NULL };
         strcpy(node.username, user);
         strcpy(node.ip, ipstr);
@@ -516,6 +552,7 @@ void tracker_handler(struct selector_key * key) {
 char * getUser(char* username, char* usersS) {
   int len = strlen(username);
   char usernameComma[len+3];
+  memset(usernameComma, '\0', len);
   usernameComma[0] = '\n';
   strcat(usernameComma, username);
   usernameComma[len+1] = ',';
@@ -528,7 +565,7 @@ int loginUser(char * username, char * password) {
   fseek(users, 0L, SEEK_END);
   int usersStrLen = ftell(users);
   rewind(users);
-  char * usersStr = malloc(usersStrLen*sizeof(char));
+  char usersStr[usersStrLen];
   fread(usersStr, sizeof(char), usersStrLen, users);
   char* user = getUser(username, usersStr);
   if (user == NULL) {

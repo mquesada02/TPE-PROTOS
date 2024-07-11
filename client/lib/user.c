@@ -199,7 +199,7 @@ void loginHandler(PARAMS) {
     //char hash[33];
 
     snprintf(requestBuff, requestSize - 1, "%s %s:%s%c", LOGIN, argv[1], argv[2], SEND);
-
+    
     sendMessage(key, requestBuff, requestSize - 1);
 
     size_t responseSize = 256;

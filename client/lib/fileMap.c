@@ -5,7 +5,7 @@
 #include "../include/utils.h"
 #include "../include/fileMap.h"
 
-#define TABLE_SIZE 100
+
 
 typedef struct Entry {
     unsigned char key[MD5_SIZE+1];
