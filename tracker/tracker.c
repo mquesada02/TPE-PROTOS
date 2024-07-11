@@ -74,11 +74,6 @@ int main(int argc,char ** argv){
     close(0);
 
     users = fopen("auth/users.csv", "a+");
-    int c = fgetc(users);
-    if (c == EOF)
-      fputs("Username,Password\n",users);
-    else
-      ungetc(c, users);
     
     const char       *err_msg = NULL;
     selector_status   ss      = SELECTOR_SUCCESS;
@@ -182,7 +177,6 @@ char * getUsernameFromIpNPort(char * ip, char * port) {
     return NULL;
   return _getUsernameFromIpNPort(state->first, ip, port);
 }
-
 
 UserNode * removeSeeder(UserNode * seeder, char * username) {
   if (seeder == NULL)
@@ -465,6 +459,14 @@ bool userIsLoggedIn(char * ip, char * port) {
   return userFind(state->first, ip, port);
 }
 
+void registerUser(char * username, char * password) {
+  if (users == NULL) return;
+  char buffer[MAX_STRING_LENGTH];
+  sprintf(buffer, "%s,%s\n",username,password);
+  fputs(buffer, users);
+  fflush(users);
+}
+
 void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
   if (userIsLoggedIn(ipstr, portstr)) {
     if (strcmp(cmd, "LIST") == 0) { // LIST files
@@ -497,6 +499,52 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
         addLeecher(hash, ipstr, portstr);
       } else
         sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    }
+    if (strcmp(cmd, "CHANGEPASSWORD") == 0){ //CHANGEPASSWORD oldPassword newPassword
+      char * oldPassword = strtok(NULL, " ");
+      char * newPassword = strtok(NULL, "\n");
+
+      if(strcmp(oldPassword, newPassword)==0){
+        sendto(fd, "New password cannot be the same as old password\n", strlen("New password cannot be the same as old password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+      } else {
+        fseek(users, 0L, SEEK_END);
+        int usersStrLen = ftell(users);
+        rewind(users);
+        char usersStr[usersStrLen+1];
+        size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
+        usersStr[size] = '\0';
+        char * username = getUsernameFromIpNPort(ipstr, portstr);
+        char * user = getUser(username, usersStr);
+
+        strtok(user, ",");
+        char * passwordStr = strtok(NULL, "\n");
+
+        if(strcmp(passwordStr, oldPassword) != 0){
+          sendto(fd, "Incorrect password\n", strlen("Incorrect password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+        } else {
+          FILE * newCSV = fopen("auth/temp.csv", "a+");
+          char * bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(usersStr, "\0");
+          char bufferToStoreUsernameAndPasswordFromUser[MAX_STRING_LENGTH];
+          sprintf(bufferToStoreUsernameAndPasswordFromUser, "%s,%s", username, oldPassword);
+          while((bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(NULL, "\n"))){
+            if(strcmp(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, bufferToStoreUsernameAndPasswordFromUser)!=0){
+              fputs(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, newCSV);
+              fputc('\n', newCSV);
+            }
+          }
+          fflush(newCSV);
+          remove("auth/users.csv");
+          fclose(users);
+          fclose(newCSV);
+          rename("auth/temp.csv", "auth/users.csv");
+          users = fopen("auth/users.csv", "a+");
+
+          registerUser(username, newPassword);
+
+          sendto(fd, "Password changed successfully\n", strlen("Password changed successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+        }
+      }
+
     }
   } else {
     if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
@@ -580,10 +628,6 @@ int loginUser(char * username, char * password) {
   return false;
 }
 
-void registerUser(char * username, char * password) {
-  if (users == NULL) return;
-  char buffer[MAX_STRING_LENGTH];
-  sprintf(buffer, "%s,%s\n",username,password);
-  fputs(buffer, users);
-  fflush(users);
+void changePassword(char * oldPassword, char * newPassword){
+
 }
