@@ -288,7 +288,7 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
             return 1;
         }
 
-        size_t auxSize = bufferSize;
+        size_t auxSize = bufferSize - 1;
 
         if(sections == 0 || sections == currentSection + 1) {
             auxSize = fileSize % SECTIONSIZE;
