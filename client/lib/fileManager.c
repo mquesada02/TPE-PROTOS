@@ -221,12 +221,6 @@ void cancelDownload() {
         free(stateMap);
         stateMap = NULL;
     }
-    if(newFile && filename){
-        char* aux = getFilenamePath();
-        remove(aux);
-        newFile = NULL;
-        free(aux);
-    }
     if(filename){
         free(filename);
         filename = NULL;
@@ -288,7 +282,7 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
             return 1;
         }
 
-        size_t auxSize = bufferSize;
+        size_t auxSize = bufferSize - 1;
 
         if(sections == 0 || sections == currentSection + 1) {
             auxSize = fileSize % SECTIONSIZE;
@@ -298,7 +292,7 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
         fclose(newFile);
         free(aux);
 
-        if (sections == 0 || currentSection++ == sections) {
+        if (sections == 0 || ++currentSection == sections) {
             free((void *) buffer);
             buffer = NULL;
             free(stateMap);
@@ -317,4 +311,3 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
     }
     return 0;
 }
-
