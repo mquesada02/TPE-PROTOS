@@ -19,6 +19,8 @@
 
 #define CLOSE_MSG "Closing"
 
+#define LEN_DEFINE_SIZE 32
+
 #define MAX_ADDR_BUFFER 128
 #define MAXPENDING 32
 
@@ -278,10 +280,29 @@ void leecherWrite(struct selector_key *key) {
         perror("Error reading file");
         goto error;
     }
+    char buff[LEN_DEFINE_SIZE];
 
-    ssize_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer, bytesRead, 0);
-    if (sent_bytes <= 0) {
+    snprintf(buff, LEN_DEFINE_SIZE, "%lu", bytesRead);
+
+    size_t aux = send(key->fd, buff, LEN_DEFINE_SIZE, 0);
+
+    if(aux <= 0) {
         perror("Failed to send response");
+        goto error;
+    }
+
+    size_t totalBytesSent = 0;
+    while (totalBytesSent < bytesRead) {
+        size_t sent_bytes = send(key->fd, LEECH(key)->responseBuffer + totalBytesSent, bytesRead - totalBytesSent, 0);
+        printf("Sent %lu Bytes\n", sent_bytes);
+        if (sent_bytes <= 0) {
+            perror("Failed to send response");
+            goto error;
+        }
+        totalBytesSent += sent_bytes;
+    }
+    if (totalBytesSent != bytesRead) {
+        perror("Failed to send all data");
         goto error;
     }
 
@@ -429,17 +450,33 @@ void peerRead(struct selector_key *key) {
         return;
     }
 
-    ssize_t bytes = recv(key->fd, PEER(key)->responseBuffer, CHUNKSIZE, 0);
+    char buff[LEN_DEFINE_SIZE];
 
-    if (bytes > 0) {
-        PEER(key)->readReady = true;
-        addBytesRead(bytes);
-    } else {
-        PEER(key)->killFlag = true;
+    size_t aux = recv(key->fd, buff, LEN_DEFINE_SIZE, 0);
+
+    if(aux <= 0) {
         perror("Failed to connect (recv) to seeder");
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
+
+    size_t totalBytesIncoming = atoi(buff);
+
+    size_t totalBytesReceived = 0;
+    while (totalBytesReceived < totalBytesIncoming) {
+        size_t bytes = recv(key->fd, PEER(key)->responseBuffer + totalBytesReceived, totalBytesIncoming - totalBytesReceived, 0);
+        printf("Received %lu Bytes\n", bytes);
+        if (bytes > 0) {
+            totalBytesReceived += bytes;
+        } else {
+            PEER(key)->killFlag = true;
+            perror("Failed to connect (recv) to seeder");
+            pthread_mutex_unlock(&PEER(key)->mutex);
+            return;
+        }
+    }
+    PEER(key)->readReady = true;
+    addBytesRead(totalBytesReceived);
 
     selector_set_interest(key->s, key->fd, OP_WRITE);
     pthread_mutex_unlock(&PEER(key)->mutex);
