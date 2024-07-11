@@ -35,6 +35,8 @@ struct Peer {
 
 #define PARAMS int argc, char *argv[], struct selector_key *key
 
+#define CHECK_THREAD_DEATH(i) if (peers[i].peer->killFlag) { peers[i].status = DEAD; break;}
+
 char inputBuffer[INPUT_SIZE];
 
 struct Peer peers[MAX_PEERS];
@@ -105,6 +107,7 @@ void* handleDownload() {
                 switch (peers[i].status) {
                     case READ_READY:
                         pthread_mutex_lock(&peers[i].peer->mutex);
+                        CHECK_THREAD_DEATH(i)
                         memset(buff,0,CHUNKSIZE);
                         if(readFromPeer(peers[i].peer, buff) != -1) {
                             retrievedChunk(peers[i].currByte, buff);
@@ -114,15 +117,15 @@ void* handleDownload() {
                         break;
                     case WAITING:
                         pthread_mutex_lock(&peers[i].peer->mutex);
+                        CHECK_THREAD_DEATH(i)
                         val = nextChunk(&byte);
                         if (val == -2) {
                             for (int j = 0; j < activePeers; j++) {
                                 if (peers[j].status == WAITING) {
                                     peers[j].peer->killFlag = true;
-                                    pthread_mutex_unlock(&peers[i].peer->mutex);
-                                    peers[j].peer = NULL;
                                     peers[j].status = DEAD;
                                     peersFinished++;
+                                    pthread_mutex_unlock(&peers[i].peer->mutex);
                                 }
                             }
                             if (peersFinished == activePeers) {
@@ -146,6 +149,7 @@ void* handleDownload() {
                         break;
                     case BUSY:
                         pthread_mutex_lock(&peers[i].peer->mutex);
+                        CHECK_THREAD_DEATH(i)
                         if (peers[i].peer->killFlag) {
                             perror("WTF");
                             return 0;
