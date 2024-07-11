@@ -282,13 +282,13 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
     newNode->file->leechers = NULL;
     strcpy(newNode->file->MD5, hash);
     newNode->file->seeders = insertSeeder(newNode->file, newNode->file->seeders, ip, port);
-    sendto(fd, "You are the first to register this file\n", strlen("You are the first to register this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    //sendto(fd, "You are the first to register this file\n", strlen("You are the first to register this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     return newNode;
   }
   if (cmp == 0) {
     // found the same element. Add a seeder
     node->file->seeders = insertSeeder(node->file, node->file->seeders, ip, port);
-    sendto(fd, "File registered successfully\n", strlen("File registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    //sendto(fd, "File registered successfully\n", strlen("File registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
   }
   if (cmp < 0) {
     // still searching
@@ -518,7 +518,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       } else {
           sendto(fd, "Incorrect password for user\n", strlen("Incorrect password for user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
       }
-    } else {
+    } else if (strcmp(cmd, "REGISTER") != 0){
       sendto(fd, "Authentication failed\n", strlen("Authentication failed\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     }
   }
@@ -565,8 +565,9 @@ int loginUser(char * username, char * password) {
   fseek(users, 0L, SEEK_END);
   int usersStrLen = ftell(users);
   rewind(users);
-  char usersStr[usersStrLen];
-  fread(usersStr, sizeof(char), usersStrLen, users);
+  char usersStr[usersStrLen+1];
+  size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
+  usersStr[size] = '\0';
   char* user = getUser(username, usersStr);
   if (user == NULL) {
     registerUser(username, password);

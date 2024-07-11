@@ -1,6 +1,9 @@
 #ifndef FILEMANAGER_H
 #define FILEMANAGER_H
 #include <stddef.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
 
 typedef enum FileSuccess{FILE_SUCCESS,FILE_MISSING,FILE_ERROR_READING} FileSuccess;
 
