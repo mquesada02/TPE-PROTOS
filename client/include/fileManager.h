@@ -7,8 +7,8 @@
 
 typedef enum FileSuccess{FILE_SUCCESS,FILE_MISSING,FILE_ERROR_READING} FileSuccess;
 
-#define CHUNKSIZE (size_t)(32*1024)
-#define SECTIONSIZE (size_t)(5*CHUNKSIZE)
+#define CHUNKSIZE (size_t)(1024*1024)
+#define SECTIONSIZE (size_t)(64*CHUNKSIZE)
 
 size_t getFileSize(char* md5);
 size_t copyFromFile(char* buffer,char* md5,size_t offset, size_t bytes,int* statusCode);
@@ -20,7 +20,7 @@ size_t addBytesRead(size_t bytes);
 void cancelDownload();
 size_t getBytesRead();
 void initFileBuffer(char* newFilename, size_t size);
-size_t nextChunk();
+int nextChunk(size_t *byte);
 int retrievedChunk(size_t  chunkNum, char* chunk);
 
 #endif
