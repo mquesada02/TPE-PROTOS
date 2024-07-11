@@ -1,21 +1,23 @@
 #ifndef FILEMANAGER_H
 #define FILEMANAGER_H
+#include <stddef.h>
 
+typedef enum FileSuccess{FILE_SUCCESS,FILE_MISSING,FILE_ERROR_READING} FileSuccess;
 
-#define CHUNKSIZE (256)
-#define SECTIONSIZE (1024*CHUNKSIZE) //5MB, tamaño máximo del buffer de descarga
+#define CHUNKSIZE (size_t)(32*1024)
+#define SECTIONSIZE (size_t)(5*CHUNKSIZE)
 
-long unsigned int getFileSize(char* md5);
-long copyFromFile(char* buffer,char* md5,long offset, unsigned long bytes);
-long removeFile(char* md5);
-long initializeFileManager();
-long addFile(char* md5,char* filename);
+size_t getFileSize(char* md5);
+size_t copyFromFile(char* buffer,char* md5,size_t offset, size_t bytes,int* statusCode);
+int removeFile(char* md5);
+int initializeFileManager();
+int addFile(char* md5,char* filename);
 void endFileManager();
-long unsigned int addBytesRead(long bytes);
+size_t addBytesRead(size_t bytes);
 void cancelDownload();
-long unsigned int getBytesRead();
-void initFileBuffer(char* newFilename, long unsigned int size);
-long nextChunk();
-int retrievedChunk(unsigned long int chunkNum, char* chunk);
+size_t getBytesRead();
+void initFileBuffer(char* newFilename, size_t size);
+size_t nextChunk();
+int retrievedChunk(size_t  chunkNum, char* chunk);
 
 #endif
