@@ -61,7 +61,7 @@ void* registerFiles(void *vkey) {
                 char md5Buffer[MD5_SIZE+1];
                 sprintf(pathname,"%s/%s",REPO_PATH,dirnt->d_name);
                 calculateMD5(pathname,md5Buffer);
-                int length = MD5_SIZE+strlen("REGISTER")+strlen(dirnt->d_name)+INT_LENGTH+4;
+                int length = MD5_SIZE+strlen("REGISTER")+strlen(dirnt->d_name)+INT_LENGTH+10;
                 char buffer[length];
                 struct stat st;
                 stat(pathname, &st);

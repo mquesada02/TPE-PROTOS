@@ -499,7 +499,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
         addLeecher(hash, ipstr, portstr);
       } else
         sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-    }
+    } else
     if (strcmp(cmd, "CHANGEPASSWORD") == 0){ //CHANGEPASSWORD oldPassword newPassword
       char * oldPassword = strtok(NULL, " ");
       char * newPassword = strtok(NULL, "\n");
@@ -513,6 +513,8 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
         char usersStr[usersStrLen+1];
         size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
         usersStr[size] = '\0';
+        char usersCpy[usersStrLen+1];
+        strcpy(usersCpy, usersStr);
         char * username = getUsernameFromIpNPort(ipstr, portstr);
         char * user = getUser(username, usersStr);
 
@@ -523,14 +525,16 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
           sendto(fd, "Incorrect password\n", strlen("Incorrect password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
         } else {
           FILE * newCSV = fopen("auth/temp.csv", "a+");
-          char * bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(usersStr, "\0");
+          char * bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile;
           char bufferToStoreUsernameAndPasswordFromUser[MAX_STRING_LENGTH];
           sprintf(bufferToStoreUsernameAndPasswordFromUser, "%s,%s", username, oldPassword);
-          while((bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(NULL, "\n"))){
-            if(strcmp(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, bufferToStoreUsernameAndPasswordFromUser)!=0){
-              fputs(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, newCSV);
-              fputc('\n', newCSV);
-            }
+          bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(usersCpy, "\n");
+          while (bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile != NULL) {
+              if (strcmp(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, bufferToStoreUsernameAndPasswordFromUser) != 0) {
+                  fputs(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, newCSV);
+                  fputc('\n', newCSV);
+              }
+              bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(NULL, "\n");
           }
           fflush(newCSV);
           remove("auth/users.csv");
