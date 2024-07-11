@@ -120,12 +120,35 @@ void endFileManager(){
     freeMap(map);
 }
 
-//inicializa todas las variables para poder ir juntando los chinks del archivo
+char* getFilenamePath(){
+    int len = strlen("../repository/") + strlen(filename);
+    char* aux = malloc(len+1); // Allocate memory for aux
+    if (aux == NULL) {
+        perror("Unable to allocate memory for aux");
+        return NULL;
+    }
+    strcpy(aux, "../repository/");
+    strcat(aux, filename);
+    aux[len] = '\0';
+
+    return aux;
+}
+
+//inicializa todas las variables para poder ir juntando los chunks del archivo
 void initFileBuffer(char* newFilename, size_t size) {
     if(buffer){
         perror("A file is already being downloaded.");
         return;
     }
+
+    char* aux = getFilenamePath();
+    int fd = open(aux, O_CREAT|O_EXCL);
+    if(fd<0 && errno==EEXIST) {
+        remove(aux); //elimina el archivo si ya existía para reemplazarlo
+    } else{
+        close(fd);
+    }
+    free(aux);
 
     fileSize = size;
     bytesReadPerSection=0;
@@ -145,6 +168,10 @@ void initFileBuffer(char* newFilename, size_t size) {
         return;
     }
     stateMap = malloc(stateMapSize*sizeof(StateValue));
+    if (stateMap == NULL){
+        perror("Unable to allocate memory for State Map");
+        return;
+    }
     for(size_t i=0; i<stateMapSize; i++) {
         stateMap[i].state = MISSING;
         stateMap[i].timesAttempted = 0;
@@ -164,8 +191,16 @@ void initForNewSection() {
         bufferSize = stateMapSize*CHUNKSIZE+1;
         free(stateMap);
         stateMap = malloc(stateMapSize*sizeof(StateValue));
+        if (stateMap == NULL){
+            perror("Unable to allocate memory for State Map");
+            return;
+        }
         free(buffer);
         buffer =  malloc(bufferSize);
+        if (buffer == NULL){
+            perror("Unable to allocate memory for downloading file");
+            return;
+        }
     }
 
     for(size_t i=0; i<stateMapSize; i++) {
@@ -188,15 +223,7 @@ void cancelDownload() {
         stateMap = NULL;
     }
     if(newFile && filename){
-        int len = strlen("../repository/") + strlen(filename);
-        char* aux = malloc(len+1); // Allocate memory for aux
-        if (aux == NULL) {
-            perror("Unable to allocate memory for aux");
-            return;
-        }
-        strcpy(aux, "../repository/");
-        strcat(aux, filename);
-        aux[len] = '\0';
+        char* aux = getFilenamePath();
         remove(aux);
         newFile = NULL;
         free(aux);
@@ -249,15 +276,7 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
 
     if(chunksRetrieved == stateMapSize) {
 
-        int len = strlen("../repository/") + strlen(filename);
-        char *aux = malloc(len + 1); // Allocate memory for aux
-        if (aux == NULL) {
-            perror("Unable to allocate memory for aux");
-            return 1;
-        }
-
-        strcpy(aux, "../repository/");
-        strcat(aux, filename);
+        char* aux = getFilenamePath();
 
         newFile = fopen(aux, "a");
         if (newFile == NULL) {
