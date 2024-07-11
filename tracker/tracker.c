@@ -565,8 +565,9 @@ int loginUser(char * username, char * password) {
   fseek(users, 0L, SEEK_END);
   int usersStrLen = ftell(users);
   rewind(users);
-  char usersStr[usersStrLen];
-  fread(usersStr, sizeof(char), usersStrLen, users);
+  char* usersStr = malloc(sizeof(char) * usersStrLen + 1);
+  size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
+  usersStr[size] = '\0';
   char* user = getUser(username, usersStr);
   if (user == NULL) {
     registerUser(username, password);
