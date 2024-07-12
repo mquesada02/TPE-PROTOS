@@ -9,7 +9,7 @@
 #define MAX_STRING_LENGTH (512+1)
 #define MAX_FILENAME (256+1)
 #define INT_LEN 20
-#define QUANTUM 10
+#define QUANTUM 20
 #define CONF_BUFF_SIZE 32
 
 #define IP_LEN 16
@@ -27,6 +27,7 @@ typedef struct UserState {
   char username[MAX_USERNAME_SIZE];
   char ip[IP_LEN];
   char port[PORT_LEN];
+  char seederPort[PORT_LEN];
   struct UserState * next;
 } UserState;
 
@@ -182,6 +183,8 @@ UserState * _insertUser(UserState * node, UserState value) {
     newNode->ip[IP_LEN-1] = '\0';
     strncpy(newNode->port, value.port, PORT_LEN-1);
     newNode->port[PORT_LEN-1] = '\0';
+    strncpy(newNode->seederPort, value.port, PORT_LEN-1);
+    newNode->seederPort[PORT_LEN-1] = '\0';
     newNode->next = node;
     return newNode;
   }
@@ -350,7 +353,7 @@ void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, 
   if (strcmp(username, userState->username) == 0) {
     strncpy(ip, userState->ip, IP_LEN-1);
     ip[IP_LEN-1] = '\0';
-    strncpy(port, userState->port, PORT_LEN-1);
+    strncpy(port, userState->seederPort, PORT_LEN-1);
     port[PORT_LEN-1] = '\0';
     return;
   }
@@ -557,6 +560,19 @@ void getSize(char * hash, int fd, struct sockaddr_storage client_addr) {
   getNReturnSize(fileList,hash, fd, client_addr);
 }
 
+void _setSeederPort(UserState * user, char * ipstr, char * portstr, char * newPort) {
+  if (user == NULL) return;
+  if (strcmp(user->ip,ipstr) == 0 && strcmp(user->port,portstr) == 0) {
+    strcpy(user->seederPort,newPort);
+    return;
+  }
+  _setSeederPort(user->next, ipstr, portstr, newPort);
+}
+
+void setSeederPort(char * ipstr, char * portstr, char * newPort) {
+  _setSeederPort(state->first, ipstr, portstr, newPort);
+}
+
 void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
   if (userIsLoggedIn(ipstr, portstr)) {
     if (strcmp(cmd, "PLAIN") == 0) {
@@ -653,6 +669,9 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
     } else if (strcmp(cmd, "SIZE") == 0) {
       char * hash = strtok(NULL, "\n");
       getSize(hash, fd, client_addr);
+    } else if (strcmp(cmd, "SETPORT") == 0) {
+      char * newPort = strtok(NULL, "\n");
+      setSeederPort(ipstr, portstr, newPort);
     }
   } else {
     if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
