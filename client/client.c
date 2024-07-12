@@ -90,11 +90,32 @@ int main(int argc,char ** argv){
     openlog("client-application",LOG_PID | LOG_NDELAY ,LOG_LOCAL1);
     syslog(LOG_NOTICE,"Client application started");
 
-    initializeFileManager();
 
     const char       *err_msg = NULL;
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
+
+    struct stat st;
+
+    if(stat("../downloads",&st)!=0){
+       if(mkdir("../downloads",0777)!=0){
+         err_msg="error creating downloads directory";
+         goto no_mutex;
+       }
+    }
+
+    if(stat("../repository",&st)!=0){
+        if(mkdir("../repository",0777)!=0){
+         err_msg="error creating repository directory";
+         goto no_mutex;
+       }
+    }
+
+
+    if(initializeFileManager()<0){
+        err_msg="Failed to initialize File Manager";
+        goto finally;
+    }
 
 
     char trackerPortStr[6];
@@ -117,7 +138,7 @@ int main(int argc,char ** argv){
     };
 
     if (pthread_mutex_init(&sendingMutex, NULL) != 0) {
-        perror("Failed to initialize mutex");
+        err_msg="Failed to initialize mutex";
         goto no_mutex;
     }
 
