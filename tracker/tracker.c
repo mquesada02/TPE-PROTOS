@@ -1,6 +1,7 @@
 #include "include/tracker.h"
 
 #include <pthread.h>
+#include <sys/stat.h>
 
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
@@ -93,7 +94,7 @@ void * deleteUncheckedSeeders() {
       if (list->file->seeders == NULL)
         removeFile(list->file->MD5);
       list = fileList->next;
-    } 
+    }
     sleep(QUANTUM);
     list = fileList;
   }
@@ -108,19 +109,32 @@ int main(int argc,char ** argv){
     args.socks_port = port;
 
     parse_args(argc, argv, &args);
-
+    struct stat st;
     close(0);
 
+    const char       *err_msg = NULL;
+    selector_status   ss      = SELECTOR_SUCCESS;
+    fd_selector selector      = NULL;
+
+     if(stat("auth",&st)!=0){
+      printf("Creating directory auth\n");
+       if(mkdir("auth",0777)!=0){
+         err_msg="error creating directory";
+         goto no_mutex;
+       }
+    }
     users = fopen("auth/users.csv", "a+");
+    if(users==NULL){
+      err_msg="Error opening auth/users.csv file";
+      goto no_mutex;
+    }
+
     char c;
     if ((c = fgetc(users)) == EOF)
       fputc('\n',users);
     else
       ungetc(c, users);
-    
-    const char       *err_msg = NULL;
-    selector_status   ss      = SELECTOR_SUCCESS;
-    fd_selector selector      = NULL;
+
 
     char portStr[6];
     sprintf(portStr, "%d",args.socks_port);
@@ -197,12 +211,16 @@ int main(int argc,char ** argv){
   } else if(err_msg) {
     perror(err_msg);
   }
-  if (selector != NULL)
+  if (selector != NULL){
     selector_destroy(selector);
+  }
   selector_close();
-  if (socket >= 0)
+  if (socket >= 0){
     close(socket);
-  fclose(users);
+  }
+  if(users!=NULL){
+    fclose(users);
+  }
   freeUsers();
   freeFileList();
   return 0;
@@ -624,13 +642,13 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
           pthread_mutex_unlock(&filesMutex);
         }
       }
-    } 
+    }
     if (strcmp(cmd, "REGISTER") == 0) { // REGISTER <name> <bytes> <hash>
       char * name = strtok(NULL, " ");
       char * bytes = strtok(NULL, " ");
       char * hash = strtok(NULL, "\n");
 	    registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
-    } else 
+    } else
     if (strcmp(cmd, "CHECK") == 0) {
       char * ip = strtok(NULL, ":");
       char * port = strtok(NULL, " ");
@@ -724,7 +742,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       char * password = strtok(NULL, "\n");
       int loginState = loginUser(user, password, fd, client_addr);
       if (loginState > 0 && loginState < 3) {
-        if (state == NULL) 
+        if (state == NULL)
           state = calloc(1,sizeof(struct TrackerState));
         UserState node = (UserState) {.next = NULL };
         strncpy(node.username, user, MAX_USERNAME_SIZE-1);
@@ -745,7 +763,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       sendto(fd, "Authentication failed\n", strlen("Authentication failed\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     }
   }
-  
+
   if (strcmp(strtok(cmd,"\n"), "QUIT") == 0) {
     pthread_mutex_lock(&filesMutex);
     pthread_mutex_lock(&usersMutex);
