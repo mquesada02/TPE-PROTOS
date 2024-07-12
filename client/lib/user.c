@@ -54,7 +54,7 @@ struct Peer {
 
 #define PARAMS int argc, char *argv[], struct selector_key *key
 
-#define CLEAN_PEER(i) peers[i].status = DEAD; peersFinished++; pthread_mutex_unlock(&peers[i].peer->mutex)
+#define CLEAN_PEER(i) peers[i].status = DEAD; peers[i].peer->killFlagAck = true; peersFinished++
 
 #define CHECK_THREAD_DEATH(i) if (peers[i].peer->killFlag) { CLEAN_PEER(i); break;}
 
@@ -163,7 +163,6 @@ void* handleDownload() {
 
                         case READ_READY:
                             pthread_mutex_lock(&peers[i].peer->mutex);
-                            CHECK_THREAD_DEATH(i)
                             memset(buff, 0, CHUNKSIZE);
                             if(readFromPeer(peers[i].peer, buff) != -1) {
                                 retrievedChunk(peers[i].currByte, buff);
@@ -174,7 +173,6 @@ void* handleDownload() {
 
                         case WAITING:
                             pthread_mutex_lock(&peers[i].peer->mutex);
-                            CHECK_THREAD_DEATH(i)
                             val = nextChunk(&byte);
                             if (val == -2) {
                                 for (int j = 0; j < activePeers; j++) {
@@ -395,8 +393,10 @@ void cancelHandler(PARAMS) {
                 peers[i].peer->killFlagAck = true;
                 peers[i].status = DEAD;
                 peers[i].peer = NULL;
+                activePeers--;
             }
         }
+        peersFinished = 0;
         printf("Download cancelled\n");
     } else {
         printf("Nothing to cancel\n");
