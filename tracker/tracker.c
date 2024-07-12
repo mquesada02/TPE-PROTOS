@@ -4,10 +4,10 @@
 
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
-#define MD5_SIZE 32
-#define MAX_USERNAME_SIZE 32
-#define MAX_STRING_LENGTH 512
-#define MAX_FILENAME 256
+#define MD5_SIZE (32+1)
+#define MAX_USERNAME_SIZE (32+1)
+#define MAX_STRING_LENGTH (512+1)
+#define MAX_FILENAME (256+1)
 #define INT_LEN 12
 #define QUANTUM 10
 #define CONF_BUFF_SIZE 32
@@ -34,12 +34,14 @@ struct TrackerState {
   UserState * first;
 };
 
-pthread_mutex_t mutex;
+pthread_mutex_t usersMutex;
+pthread_mutex_t filesMutex;
 typedef struct File{
     char name[MAX_FILENAME];
     int size; //bytes
     char MD5[MD5_SIZE];
     UserNode * seeders;
+    size_t seedersSize;
     UserNode * leechers;
 } File;
 
@@ -84,6 +86,11 @@ int main(int argc,char ** argv){
     close(0);
 
     users = fopen("auth/users.csv", "a+");
+    char c;
+    if ((c = fgetc(users)) == EOF)
+      fputc('\n',users);
+    else
+      ungetc(c, users);
     
     const char       *err_msg = NULL;
     selector_status   ss      = SELECTOR_SUCCESS;
@@ -127,7 +134,11 @@ int main(int argc,char ** argv){
     err_msg = "Unable to register FD for IPv4/IPv6.";
     goto finally;
   }
-  if (pthread_mutex_init(&mutex, NULL) != 0) {
+  if (pthread_mutex_init(&usersMutex, NULL) != 0) {
+    perror("Failed to initialize mutex");
+    goto finally;
+  }
+  if (pthread_mutex_init(&filesMutex, NULL) != 0) {
     perror("Failed to initialize mutex");
     goto finally;
   }
@@ -157,17 +168,21 @@ int main(int argc,char ** argv){
   fclose(users);
   freeUsers();
   freeFileList();
-  pthread_mutex_destroy(&mutex);
+  pthread_mutex_destroy(&filesMutex);
+  pthread_mutex_destroy(&usersMutex);
   return 0;
 }
 
 UserState * _insertUser(UserState * node, UserState value) {
   if (node == NULL) {
     UserState * newNode = malloc(sizeof(UserState));
-    strcpy(newNode->username, value.username);
-    strcpy(newNode->ip, value.ip);
-    strcpy(newNode->port, value.port);
-    newNode->next = value.next;
+    strncpy(newNode->username, value.username, MAX_USERNAME_SIZE-1);
+    newNode->username[MAX_USERNAME_SIZE-1] = '\0';
+    strncpy(newNode->ip, value.ip, IP_LEN-1);
+    newNode->ip[IP_LEN-1] = '\0';
+    strncpy(newNode->port, value.port, PORT_LEN-1);
+    newNode->port[PORT_LEN-1] = '\0';
+    newNode->next = node;
     return newNode;
   }
   node->next = _insertUser(node->next, value);
@@ -175,9 +190,9 @@ UserState * _insertUser(UserState * node, UserState value) {
 }
 
 void insertUser(UserState value) {
-  pthread_mutex_lock(&mutex);
+  pthread_mutex_lock(&usersMutex);
   state->first = _insertUser(state->first, value);
-  pthread_mutex_unlock(&mutex);
+  pthread_mutex_unlock(&usersMutex);
 }
 
 char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port) {
@@ -245,41 +260,42 @@ void removeFile(char * MD5) {
 void * deleteAfterQuantum(void * arg) {
   TArg * targ = (TArg *) arg;
   sleep(QUANTUM);
-  pthread_mutex_lock(&mutex);
+  pthread_mutex_lock(&filesMutex);
   targ->file->seeders = removeSeeder(targ->file->seeders, targ->value->username);
   if (targ->file->seeders == NULL) {
     removeFile(targ->file->MD5);
   }
-  pthread_mutex_unlock(&mutex);
+  pthread_mutex_unlock(&filesMutex);
   free(arg);
   return NULL;
 }
 
-UserNode * _insertSeeder(File * file, UserNode * node, char * username) {
+UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * inserted) {
   int cmp;
   if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
     // reached the end of the list or passed. Insert new node
-    UserNode * newNode = malloc(sizeof(UserNode));
-    strcpy(newNode->username, username);
+    UserNode * newNode = calloc(1,sizeof(UserNode));
+    strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
+    newNode->username[MAX_USERNAME_SIZE-1] = '\0';
     newNode->next = node;
-    
     pthread_t tid;
     TArg * arg = malloc(sizeof(TArg));
     arg->file = file;
     arg->value = newNode;
+    *inserted = true;
     pthread_create(&tid, NULL, deleteAfterQuantum, arg);
     pthread_detach(tid);
     return newNode;
   }
   if (cmp < 0) {
-    node->next = _insertSeeder(file, node->next, username);
+    node->next = _insertSeeder(file, node->next, username, inserted);
   }
   return node;
 }
 
-UserNode * insertSeeder(File * file, UserNode * first, char * ip, char * port) {
+UserNode * insertSeeder(File * file, UserNode * first, char * ip, char * port, bool * inserted) {
   char * username = getUsernameFromIpNPort(ip, port);
-  return _insertSeeder(file, first, username);
+  return _insertSeeder(file, first, username, inserted);
 }
 
 FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
@@ -289,19 +305,29 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
     FileList * newNode = malloc(sizeof(FileList));
     newNode->file = malloc(sizeof(File));
     newNode->next = node;
-    strcpy(newNode->file->name, name);
+    strncpy(newNode->file->name, name,MAX_FILENAME-1);
+    newNode->file->name[MAX_FILENAME-1] = '\0';
     newNode->file->size = atoi(bytes);
     newNode->file->seeders = NULL;
     newNode->file->leechers = NULL;
-    strcpy(newNode->file->MD5, hash);
-    newNode->file->seeders = insertSeeder(newNode->file, newNode->file->seeders, ip, port);
+    strncpy(newNode->file->MD5, hash, MD5_SIZE-1);
+    newNode->file->MD5[MD5_SIZE-1] = '\0';
+    bool inserted = false;
+    newNode->file->seeders = insertSeeder(newNode->file, newNode->file->seeders, ip, port, &inserted);
+    if (inserted)
+      newNode->file->seedersSize = 1;
+    else
+      newNode->file->seedersSize = 0;
     fileListSize++;
     //sendto(fd, "You are the first to register this file\n", strlen("You are the first to register this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     return newNode;
   }
   if (cmp == 0) {
     // found the same element. Add a seeder
-    node->file->seeders = insertSeeder(node->file, node->file->seeders, ip, port);
+    bool inserted = false;
+    node->file->seeders = insertSeeder(node->file, node->file->seeders, ip, port, &inserted);
+    if (inserted)
+      node->file->seedersSize++;
     //sendto(fd, "File registered successfully\n", strlen("File registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
   }
   if (cmp < 0) {
@@ -312,9 +338,9 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
 }
 
 void registerFile(char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
-  pthread_mutex_lock(&mutex);
+  pthread_mutex_lock(&filesMutex);
   fileList = _registerFile(fileList, name, bytes, hash, ip, port, fd, client_addr);
-  pthread_mutex_unlock(&mutex);
+  pthread_mutex_unlock(&filesMutex);
 
 }
 
@@ -322,17 +348,17 @@ void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, 
   if (userState == NULL )
     return; // not found
   if (strcmp(username, userState->username) == 0) {
-    strcpy(ip, userState->ip);
-    strcpy(port, userState->port);
+    strncpy(ip, userState->ip, IP_LEN-1);
+    ip[IP_LEN-1] = '\0';
+    strncpy(port, userState->port, PORT_LEN-1);
+    port[PORT_LEN-1] = '\0';
     return;
   }
   _getIpNPortFromUsername(userState->next, username, ip, port);
 }
 
 void getIpNPortFromUsername(char * username, char * ip, char * port) {
-  pthread_mutex_lock(&mutex);
   _getIpNPortFromUsername(state->first, username, ip, port);
-  pthread_mutex_unlock(&mutex);
 }
 
 void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr) {
@@ -348,6 +374,12 @@ void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr)
   sendSeeders(seeder->next, fd, client_addr);
 }
 
+void sendSeedersSize(size_t size, int fd, struct sockaddr_storage client_addr) {
+  char buffer[INT_LEN];
+  sprintf(buffer,"%ld\n",size);
+  sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+}
+
 void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage client_addr) {
   int cmp;
   if (node == NULL || node->file == NULL || (cmp = strcmp(hash, node->file->MD5)) > 0) {
@@ -355,6 +387,7 @@ void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage cli
     return;
   }
   if (cmp == 0) {
+    sendSeedersSize(node->file->seedersSize, fd, client_addr);
     sendSeeders(node->file->seeders, fd, client_addr);
     return;
   }
@@ -460,7 +493,8 @@ UserNode * _addLeecher(UserNode * node, char * username) {
   if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
     // reached the end of the list or passed. Insert new node
     UserNode * newNode = malloc(sizeof(UserNode));
-    strcpy(newNode->username, username);
+    strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
+    newNode->username[MAX_USERNAME_SIZE-1] = '\0';
     newNode->next = node;
     return newNode;
   }
@@ -478,11 +512,12 @@ void findNAddLeecher(FileList * node, char * hash, char * username) {
 }
 
 void addLeecher(char * hash, char * ip, char * port) {
-  pthread_mutex_lock(&mutex);
+  pthread_mutex_lock(&usersMutex);
+  pthread_mutex_lock(&filesMutex);
   char * username = getUsernameFromIpNPort(ip, port);
   findNAddLeecher(fileList, hash, username);
-  pthread_mutex_unlock(&mutex);
-
+  pthread_mutex_unlock(&filesMutex);
+  pthread_mutex_unlock(&usersMutex);
 }
 
 bool userIsLoggedIn(char * ip, char * port) {
@@ -513,18 +548,20 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
                                   // LIST peers <hash>
       char * arg = strtok(NULL, "\n");
       if (strcmp(arg, "files") == 0) {
-        pthread_mutex_lock(&mutex);
+        pthread_mutex_lock(&filesMutex);
         sendFileAmount(fd, client_addr);
         sendFiles(fd, fileList, client_addr);
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&filesMutex);
       } else {
         arg = strtok(arg, " ");
         if (strcmp(arg, "peers") == 0) {
           arg = strtok(NULL, "\n");
           // now arg has the hash of the file
-          pthread_mutex_lock(&mutex);
+          pthread_mutex_lock(&filesMutex);
+          pthread_mutex_lock(&usersMutex);
           sendPeers(fileList, fd, arg, client_addr);
-          pthread_mutex_unlock(&mutex);
+          pthread_mutex_unlock(&usersMutex);
+          pthread_mutex_unlock(&filesMutex);
         }
       }
     } 
@@ -559,7 +596,8 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
         size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
         usersStr[size] = '\0';
         char usersCpy[usersStrLen+1];
-        strcpy(usersCpy, usersStr);
+        strncpy(usersCpy, usersStr, usersStrLen);
+        usersCpy[usersStrLen] = '\0';
         char * username = getUsernameFromIpNPort(ipstr, portstr);
         char * user = getUser(username, usersStr);
 
@@ -604,9 +642,12 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
         if (state == NULL) 
           state = calloc(1,sizeof(struct TrackerState));
         UserState node = (UserState) {.next = NULL };
-        strcpy(node.username, user);
-        strcpy(node.ip, ipstr);
-        strcpy(node.port, portstr);
+        strncpy(node.username, user, MAX_USERNAME_SIZE-1);
+        node.username[MAX_USERNAME_SIZE-1] = '\0';
+        strncpy(node.ip, ipstr, IP_LEN-1);
+        node.ip[IP_LEN-1] = '\0';
+        strncpy(node.port, portstr, PORT_LEN-1);
+        node.port[PORT_LEN-1] = '\0';
         insertUser(node);
         if (loginState == 1)
           sendto(fd, "Logged in successfully\n", strlen("Logged in successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
@@ -621,10 +662,12 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
   }
   
   if (strcmp(strtok(cmd,"\n"), "QUIT") == 0) {
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&filesMutex);
+    pthread_mutex_lock(&usersMutex);
     removeFileSeeder(ipstr, portstr);
     removeLoggedUser(ipstr, portstr);
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&usersMutex);
+    pthread_mutex_unlock(&filesMutex);
   }
 }
 

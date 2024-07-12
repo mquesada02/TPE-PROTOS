@@ -311,3 +311,14 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
     }
     return 0;
 }
+
+size_t getCurrentDownloadedFileSize() {
+    return fileSize;
+}
+
+size_t getCurrentDownloadedBytes() {
+    if(completed) {
+        return fileSize;
+    }
+    return (currentSection * SECTIONSIZE) + chunksRetrieved * CHUNKSIZE;
+}

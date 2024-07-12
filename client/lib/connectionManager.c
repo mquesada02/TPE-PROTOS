@@ -41,6 +41,8 @@ void cleanupPeerMng(struct peerMng *peer);
 
 struct leecherMng {
 
+    bool registered;
+
     char requestBuffer[REQUEST_BUFFER_SIZE];
 
     char responseBuffer[CHUNKSIZE + 1];
@@ -192,6 +194,8 @@ void leecherHandler(struct selector_key *key) {
         goto fail;
     }
 
+    mng->registered = false;
+
     memset(mng, 0, sizeof(*mng));
 
 
@@ -221,6 +225,12 @@ static void quit(struct selector_key *key) {
 
 
 void leecherRead(struct selector_key *key) {
+
+    if(!LEECH(key)->registered) {
+        //ssize_t bytes = recv(key->fd, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
+        //TODO consultar con el servidor si el usuario:IP es válido
+        LEECH(key)->registered = true;
+    }
 
     memset(LEECH(key)->requestBuffer, 0, REQUEST_BUFFER_SIZE);
 
@@ -278,8 +288,8 @@ void leecherRead(struct selector_key *key) {
     return;
 
     error:
+    // no need to inform the client that a leecher lost connection/sent a bad request
     selector_unregister_fd(key->s, key->fd);
-    printf("Roto todo\n");
 }
 
 void leecherWrite(struct selector_key *key) {
@@ -319,8 +329,8 @@ void leecherWrite(struct selector_key *key) {
     return;
 
     error:
+    // no need to inform the client that a leecher lost connection/sent a bad request
     selector_unregister_fd(key->s, key->fd);
-    printf("Roto todo\n");
 }
 
 struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char **errmsg) {
@@ -423,13 +433,15 @@ int setupPeerSocket(const char *ip, const char *port) {
 }
 
 struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
-    int socket = 0;
+    int socket;
+    struct peerMng * mng = NULL;
+
     socket = setupPeerSocket(ip, port);
-    if(socket==-1){
+
+    if(socket == -1){
         perror("Failed to connect to peer");
         goto fail;
     }
-    struct peerMng * mng = NULL;
 
     mng = initializePeerMng();
 
@@ -457,7 +469,6 @@ void peerRead(struct selector_key *key) {
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
-        free(PEER(key));
         return;
     }
 
@@ -476,7 +487,6 @@ void peerRead(struct selector_key *key) {
     size_t totalBytesReceived = 0;
     while (totalBytesReceived < totalBytesIncoming) {
         size_t bytes = recv(key->fd, PEER(key)->responseBuffer + totalBytesReceived, totalBytesIncoming - totalBytesReceived, 0);
-        printf("Received %lu Bytes\n", bytes);
         if (bytes > 0) {
             totalBytesReceived += bytes;
         } else {
@@ -498,7 +508,6 @@ void peerWrite(struct selector_key *key) {
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
-        free(PEER(key));
         return;
     }
 
