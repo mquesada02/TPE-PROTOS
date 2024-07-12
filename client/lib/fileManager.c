@@ -267,7 +267,6 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
     }
 
     memcpy(buffer+(chunkNum % SECTIONSIZE), chunk, CHUNKSIZE);
-    printf("Retrieved chunk %lu || Byte (%lu - %lu)\n", stateMapIndex, chunkNum, chunkNum + CHUNKSIZE - 1);
     stateMap[stateMapIndex].state = RETRIEVED;
     chunksRetrieved++;
 
