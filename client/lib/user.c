@@ -402,11 +402,12 @@ int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *s
     ssize_t bytes = receiveMessage(key, responseBuff, responseSize);
     if(bytes <= 0) {
         printf("Connection to tracker unavailable\n");
-        return 0;
+        return 1;
     }
     *size = 0;
-    sscanf(responseBuff, "%lu", size);
-    return 1;
+    responseBuff[bytes] = '\0';
+    *size = atol(responseBuff);
+    return 0;
 }
 
 int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
@@ -434,10 +435,21 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
         if (bytes <= 0) continue;
         responseBuff[bytes] = '\0';
         struct SeedersList * seeder = malloc(sizeof(struct SeedersList));
-        strncpy(seeder->ip, strtok(responseBuff, ":"), IP_LEN + 1);
-        printf("IP:%s\n", seeder->ip);
-        strncpy(seeder->port, strtok(NULL, "\n\0"), PORT_LEN + 1);
-        printf("PORT:%s", seeder->port);
+
+        char *token = strtok(responseBuff, ":");
+        if (token != NULL) {
+            strncpy(seeder->ip, token, IP_LEN);
+            seeder->ip[IP_LEN] = '\0';
+        }
+
+        printf("IP: %s\n", seeder->ip);
+
+        token = strtok(NULL, "\n");
+        if (token != NULL) {
+            strncpy(seeder->port, token, PORT_LEN);
+            seeder->port[PORT_LEN] = '\0';
+        }
+        printf("PORT: %s\n", seeder->port);
         seeder->next = seedersList;
         seedersList = seeder;
         seeders++;
