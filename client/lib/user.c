@@ -52,7 +52,7 @@ struct Peer {
 
 #define PARAMS int argc, char *argv[], struct selector_key *key
 
-#define CLEAN_PEER(i) peers[i].status = DEAD; peersFinished++; pthread_mutex_unlock(&peers[i].peer->mutex); free(peers[i].peer)
+#define CLEAN_PEER(i) peers[i].status = DEAD; peersFinished++; pthread_mutex_unlock(&peers[i].peer->mutex)
 
 #define CHECK_THREAD_DEATH(i) if (peers[i].peer->killFlag) { CLEAN_PEER(i); break;}
 
@@ -132,6 +132,12 @@ void parseCommand(char *input, struct selector_key *key) {
     printf("Unknown command: %s\n", command);
 }
 
+void freePeers() {
+    for(int i=0; i<activePeers; i++) {
+        free(peers[i].peer);
+    }
+}
+
 void* handleDownload() {
     char buff[CHUNKSIZE];
     int val;
@@ -142,6 +148,7 @@ void* handleDownload() {
                 printf("Connection with seeders lost, attempting to reconnect...\n");
                 if(createSeederConnections(client_key, fileHash) != 0) {
                     printf("Failed to download file : No available seeders\n");
+                    freePeers();
                     cancelDownload();
                     downloading = false;
                     paused = false;
@@ -160,6 +167,7 @@ void* handleDownload() {
                             if(cleanup) {
                                 CLEAN_PEER(i);
                                 if(peersFinished == activePeers) {
+                                    freePeers();
                                     activePeers = 0;
                                     peersFinished = 0;
                                     downloading = false;
@@ -259,6 +267,7 @@ void cleanUpPeers() {
             peersFinished++;
         }
     }
+    freePeers();
 }
 
 void loginHandler(PARAMS) {
