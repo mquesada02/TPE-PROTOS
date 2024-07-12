@@ -217,6 +217,7 @@ void leecherHandler(struct selector_key *key) {
 }
 
 static void quit(struct selector_key *key) {
+    //removeLeecher(ip, port, hash);
     connections--;
     send(key->fd, CLOSE_MSG, strlen(CLOSE_MSG), 0);
     close(key->fd);
@@ -229,6 +230,7 @@ void leecherRead(struct selector_key *key) {
     if(!LEECH(key)->registered) {
         //ssize_t bytes = recv(key->fd, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
         //TODO consultar con el servidor si el usuario:IP es válido
+        //addLeecher(ip, port, hash);
         LEECH(key)->registered = true;
     }
 
