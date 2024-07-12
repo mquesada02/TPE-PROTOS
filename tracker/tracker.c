@@ -1,7 +1,6 @@
 #include "include/tracker.h"
 
 #include <pthread.h>
-#include <sys/stat.h>
 
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
@@ -166,7 +165,7 @@ void * deleteUncheckedSeeders() {
       if (list->file->seeders == NULL)
         removeFile(list->file->MD5);
       list = fileList->next;
-    }
+    } 
     sleep(QUANTUM);
     list = fileList;
   }
@@ -195,18 +194,17 @@ int main(int argc,char ** argv) {
          goto no_mutex;
        }
     }
+
     users = fopen("auth/users.csv", "a+");
-    if(users==NULL){
+    if(users == NULL){
       err_msg="Error opening auth/users.csv file";
       goto no_mutex;
     }
-
     char c;
     if ((c = fgetc(users)) == EOF)
       fputc('\n',users);
     else
       ungetc(c, users);
-
 
     char portStr[6];
     sprintf(portStr, "%d",args.socks_port);
@@ -283,14 +281,14 @@ int main(int argc,char ** argv) {
   } else if(err_msg) {
     perror(err_msg);
   }
-  if (selector != NULL){
+  if (selector != NULL) {
     selector_destroy(selector);
   }
   selector_close();
-  if (socket >= 0){
+  if (socket >= 0) {
     close(socket);
   }
-  if(users!=NULL){
+  if (users != NULL) {
     fclose(users);
   }
   freeUsers();
@@ -985,4 +983,3 @@ int loginUser(char * username, char * password, int fd, struct sockaddr_storage 
   }
   return FAILED;
 }
-
