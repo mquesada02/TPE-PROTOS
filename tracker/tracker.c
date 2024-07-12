@@ -19,6 +19,8 @@
 typedef struct UserNode{
     char username[MAX_USERNAME_SIZE];
     struct UserNode* next;
+    pthread_t killerTid;
+    struct TArg * args;
 } UserNode;
 
 
@@ -281,14 +283,24 @@ UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * i
     strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
     newNode->username[MAX_USERNAME_SIZE-1] = '\0';
     newNode->next = node;
-    pthread_t tid;
     TArg * arg = malloc(sizeof(TArg));
+    newNode->args = arg;
     arg->file = file;
     arg->value = newNode;
     *inserted = true;
-    pthread_create(&tid, NULL, deleteAfterQuantum, arg);
-    pthread_detach(tid);
+    pthread_create(&newNode->killerTid, NULL, deleteAfterQuantum, arg);
+    pthread_detach(newNode->killerTid);
     return newNode;
+  }
+  if (cmp == 0) {
+    TArg * arg = malloc(sizeof(TArg));
+    arg->file = file;
+    arg->value = node;
+    pthread_cancel(node->killerTid);
+    free(node->args);
+    node->args = arg;
+    pthread_create(&node->killerTid, NULL, deleteAfterQuantum, arg);
+    pthread_detach(node->killerTid);
   }
   if (cmp < 0) {
     node->next = _insertSeeder(file, node->next, username, inserted);
@@ -603,7 +615,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       char * name = strtok(NULL, " ");
       char * bytes = strtok(NULL, " ");
       char * hash = strtok(NULL, "\n");
-	  registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
+	    registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
     } else 
     if (strcmp(cmd, "CHECK") == 0) {
       char * ip = strtok(NULL, ":");
