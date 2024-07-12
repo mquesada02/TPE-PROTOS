@@ -8,7 +8,7 @@
 #define MAX_USERNAME_SIZE (32+1)
 #define MAX_STRING_LENGTH (512+1)
 #define MAX_FILENAME (256+1)
-#define INT_LEN 12
+#define INT_LEN 20
 #define QUANTUM 10
 #define CONF_BUFF_SIZE 32
 
@@ -38,7 +38,7 @@ pthread_mutex_t usersMutex;
 pthread_mutex_t filesMutex;
 typedef struct File{
     char name[MAX_FILENAME];
-    int size; //bytes
+    size_t size; //bytes
     char MD5[MD5_SIZE];
     UserNode * seeders;
     size_t seedersSize;
@@ -307,7 +307,7 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
     newNode->next = node;
     strncpy(newNode->file->name, name,MAX_FILENAME-1);
     newNode->file->name[MAX_FILENAME-1] = '\0';
-    newNode->file->size = atoi(bytes);
+    newNode->file->size = atol(bytes);
     newNode->file->seeders = NULL;
     newNode->file->leechers = NULL;
     strncpy(newNode->file->MD5, hash, MD5_SIZE-1);
@@ -401,7 +401,7 @@ void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr) 
   }
 
   char buff[strlen(fileList->file->name) + INT_LEN + MD5_SIZE + 8];
-  int len = sprintf(buff, "%s - %d - %s\n", fileList->file->name, fileList->file->size, fileList->file->MD5);
+  int len = sprintf(buff, "%s - %lu - %s\n", fileList->file->name, fileList->file->size, fileList->file->MD5);
 
   sendto(fd, buff, len, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 
@@ -539,6 +539,24 @@ void sendFileAmount(int fd, struct sockaddr_storage client_addr) {
   sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 }
 
+void getNReturnSize(FileList * node, char * MD5, int fd, struct sockaddr_storage client_addr) {
+  if (node == NULL || node->file == NULL) {
+    sendto(fd, "0\n", strlen("0\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    return;
+  }
+  if (strcmp(node->file->MD5, MD5) == 0) {
+    char buff[INT_LEN];
+    sprintf(buff, "%lu\n", node->file->size);
+    sendto(fd, buff, strlen(buff), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    return;
+  }
+  getNReturnSize(node->next, MD5,fd,client_addr);
+}
+
+void getSize(char * hash, int fd, struct sockaddr_storage client_addr) {
+  getNReturnSize(fileList,hash, fd, client_addr);
+}
+
 void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
   if (userIsLoggedIn(ipstr, portstr)) {
     if (strcmp(cmd, "PLAIN") == 0) {
@@ -632,6 +650,9 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
         }
       }
 
+    } else if (strcmp(cmd, "SIZE") == 0) {
+      char * hash = strtok(NULL, "\n");
+      getSize(hash, fd, client_addr);
     }
   } else {
     if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
