@@ -111,6 +111,7 @@ void* handleDownload() {
                         CHECK_THREAD_DEATH(i)
                         memset(buff,0,CHUNKSIZE);
                         if(readFromPeer(peers[i].peer, buff) != -1) {
+                            printf("%d\n", i);
                             retrievedChunk(peers[i].currByte, buff);
                             peers[i].status = WAITING;
                         }
