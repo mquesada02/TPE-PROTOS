@@ -278,8 +278,8 @@ void leecherRead(struct selector_key *key) {
     return;
 
     error:
+    // no need to inform the client that a leecher lost connection/sent a bad request
     selector_unregister_fd(key->s, key->fd);
-    printf("Roto todo\n");
 }
 
 void leecherWrite(struct selector_key *key) {
@@ -319,8 +319,8 @@ void leecherWrite(struct selector_key *key) {
     return;
 
     error:
+    // no need to inform the client that a leecher lost connection/sent a bad request
     selector_unregister_fd(key->s, key->fd);
-    printf("Roto todo\n");
 }
 
 struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char **errmsg) {

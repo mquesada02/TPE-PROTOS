@@ -23,4 +23,7 @@ void initFileBuffer(char* newFilename, size_t size);
 int nextChunk(size_t *byte);
 int retrievedChunk(size_t  chunkNum, char* chunk);
 
+size_t getCurrentDownloadedFileSize();
+size_t getCurrentDownloadedBytes();
+
 #endif
