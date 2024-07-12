@@ -30,7 +30,7 @@
 
 #define QUANTUM 5
 
-
+pthread_mutex_t sendingMutex;
 
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
@@ -46,8 +46,6 @@ static void sigterm_handler(const int signal) {
 }
 
 void* registerFiles(void *vkey) {
-    signal(SIGTERM, sigterm_handler);
-    signal(SIGINT, sigterm_handler);
     struct Tracker * tracker = (struct Tracker *) vkey;
     while(!done) {
         struct dirent* dirnt;
@@ -67,8 +65,10 @@ void* registerFiles(void *vkey) {
                 stat(pathname, &st);
                 int size = st.st_size;
                 length = sprintf(buffer, "REGISTER %s %d %s\n", dirnt->d_name, size, md5Buffer);
+                pthread_mutex_lock(&sendingMutex);
                 if (sendto(tracker->socket, buffer, length, 0, (struct sockaddr*)tracker->trackerAddr, sizeof(struct sockaddr_in)) <= 0)
                     printf("Error\n");
+                pthread_mutex_unlock(&sendingMutex);
                 //recvfrom(tracker->socket, buffer, MAX_STRING_LENGTH, 0, (struct sockaddr *)tracker->trackerAddr, (socklen_t *) sizeof(struct sockaddr_in));
             }
         }
@@ -90,11 +90,32 @@ int main(int argc,char ** argv){
     openlog("client-application",LOG_PID | LOG_NDELAY ,LOG_LOCAL1);
     syslog(LOG_NOTICE,"Client application started");
 
-    initializeFileManager();
 
     const char       *err_msg = NULL;
     selector_status   ss      = SELECTOR_SUCCESS;
     fd_selector selector      = NULL;
+
+    struct stat st;
+
+    if(stat("../downloads",&st)!=0){
+       if(mkdir("../downloads",0777)!=0){
+         err_msg="error creating downloads directory";
+         goto no_mutex;
+       }
+    }
+
+    if(stat("../repository",&st)!=0){
+        if(mkdir("../repository",0777)!=0){
+         err_msg="error creating repository directory";
+         goto no_mutex;
+       }
+    }
+
+
+    if(initializeFileManager()<0){
+        err_msg="Failed to initialize File Manager";
+        goto finally;
+    }
 
 
     char trackerPortStr[6];
@@ -103,7 +124,7 @@ int main(int argc,char ** argv){
     char peerPortStr[6];
     sprintf(peerPortStr, "%d",args.leecherSocksPort);
     int leekerSocket = setupLeecherSocket(peerPortStr, &err_msg);
-    if (leekerSocket < 0) goto finally;
+    if (leekerSocket < 0) goto no_mutex;
 
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT, sigterm_handler);
@@ -115,6 +136,11 @@ int main(int argc,char ** argv){
                     .tv_nsec = 0,
             }
     };
+
+    if (pthread_mutex_init(&sendingMutex, NULL) != 0) {
+        err_msg="Failed to initialize mutex";
+        goto no_mutex;
+    }
 
     if (selector_init(&conf) != 0) {
         err_msg = "Unable to initialize selector.";
@@ -179,6 +205,14 @@ int main(int argc,char ** argv){
     }
 
     finally:
+    pthread_mutex_lock(&sendingMutex);
+    //pthread_cancel(updateTID);
+    if (tracker->socket >= 0) {
+        sendto(tracker->socket, "QUIT\n", strlen("QUIT\n"),0,(struct sockaddr*)tracker->trackerAddr, sizeof(struct sockaddr_in));
+    }
+    pthread_mutex_unlock(&sendingMutex);
+    pthread_mutex_destroy(&sendingMutex);
+    no_mutex:
     cancelDownload();
     syslog(LOG_NOTICE,"Closing client application");
     closelog();
