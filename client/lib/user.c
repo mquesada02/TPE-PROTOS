@@ -41,6 +41,13 @@ struct Peer {
     size_t currByte;
 };
 
+typedef struct CurrentLeechers {
+	char ip[IP_LEN + 1];
+    char port[PORT_LEN + 1];
+	char fileHash[HASH_LEN + 1];
+	struct CurrentLeechers * next;
+} CurrentLeechers;
+
 #define LOGIN "PLAIN"
 #define PORT "SETPORT"
 #define FILES "LIST files"
@@ -48,13 +55,12 @@ struct Peer {
 #define SIZE "SIZE"
 #define NAME "NAME"
 #define SEND '\n'
-#define USERNAME "USERNAME"
 
 #define ATTACHMENT(key) ( (struct Tracker *) (key)->data)
 
 #define PARAMS int argc, char *argv[], struct selector_key *key
 
-#define CLEAN_PEER(i) peers[i].status = DEAD; peersFinished++; pthread_mutex_unlock(&peers[i].peer->mutex)
+#define CLEAN_PEER(i) peers[i].status = DEAD; peers[i].peer->killFlagAck = true; peersFinished++
 
 #define CHECK_THREAD_DEATH(i) if (peers[i].peer->killFlag) { CLEAN_PEER(i); break;}
 
@@ -64,7 +70,9 @@ struct Peer peers[MAX_PEERS];
 
 struct SeedersList * seedersList = NULL;
 
-struct selector_key *client_key = NULL;
+struct selector_key * client_key = NULL;
+
+CurrentLeechers * leechers = NULL;
 
 int activePeers = 0;
 int peersFinished = 0;
@@ -87,6 +95,7 @@ void resumeHandler(PARAMS);
 void cancelHandler(PARAMS);
 void downloadStatusHandler(PARAMS);
 void seedersHandler(PARAMS);
+void leechersHandler(PARAMS);
 
 struct Command commands[] = {
         {.cmd = "login", .handler = loginHandler},
@@ -97,6 +106,7 @@ struct Command commands[] = {
         {.cmd = "cancel", .handler = cancelHandler},
         {.cmd = "dstatus", .handler = downloadStatusHandler},
 		{.cmd = "seeders", .handler = seedersHandler},
+        {.cmd = "leechers", .handler = leechersHandler},
         {NULL, NULL}
 };
 
@@ -163,7 +173,6 @@ void* handleDownload() {
 
                         case READ_READY:
                             pthread_mutex_lock(&peers[i].peer->mutex);
-                            CHECK_THREAD_DEATH(i)
                             memset(buff, 0, CHUNKSIZE);
                             if(readFromPeer(peers[i].peer, buff) != -1) {
                                 retrievedChunk(peers[i].currByte, buff);
@@ -174,7 +183,6 @@ void* handleDownload() {
 
                         case WAITING:
                             pthread_mutex_lock(&peers[i].peer->mutex);
-                            CHECK_THREAD_DEATH(i)
                             val = nextChunk(&byte);
                             if (val == -2) {
                                 for (int j = 0; j < activePeers; j++) {
@@ -395,8 +403,10 @@ void cancelHandler(PARAMS) {
                 peers[i].peer->killFlagAck = true;
                 peers[i].status = DEAD;
                 peers[i].peer = NULL;
+                activePeers--;
             }
         }
+        peersFinished = 0;
         printf("Download cancelled\n");
     } else {
         printf("Nothing to cancel\n");
@@ -426,6 +436,16 @@ void seedersHandler(PARAMS) {
 	}
 }
 
+void leechersHandler(PARAMS) {
+    if(leechers==NULL) printf("There are currently no seeder connections\n");
+	else {
+		printf("Current leecher connections:\n");
+		for(CurrentLeechers * aux = leechers; aux!=NULL; aux = aux->next){
+			printf("- %s:%s - file %s\n", aux->ip, aux->port, aux->fileHash);
+		}
+	}
+}
+
 int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buff) {
     size_t requestSize = 256;
     char requestBuff[requestSize];
@@ -445,29 +465,6 @@ int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buf
     strcpy(buff, responseBuff);
     return 0;
 }
-
-/*
-int requestUsername(struct selector_key *key, char * ip, char * port, char * buff) {
-	size_t requestSize = 256;
-    char requestBuff[requestSize];
-    snprintf(requestBuff, requestSize - 1, "%s %s %s%c", USERNAME, ip, port, SEND);
-
-    sendMessage(key, requestBuff, strlen(requestBuff));
-
-    size_t responseSize = MAX_USERNAME_SIZE;
-    char responseBuff[responseSize];
-
-    ssize_t bytes = receiveMessage(key, responseBuff, responseSize);
-    if(bytes <= 0) {
-        printf("Connection to tracker unavailable\n");
-        return 1;
-    }
-	if(strcmp("No user\n", responseBuff)==0) return 2;
-    responseBuff[bytes] = '\0';
-    strcpy(buff, responseBuff);
-    return 0;
-}
-*/
 
 int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size) {
     size_t requestSize = 256;
@@ -592,4 +589,51 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
 
     clearSeederList();
     return 1;
+}
+
+void addLeecher(char * ip, char * port, char * hash) {
+
+	CurrentLeechers * node = leechers;
+
+	if(leechers == NULL || atoi(leechers->ip) == atoi(ip)){
+		leechers = malloc(sizeof(CurrentLeechers));
+		strncpy(leechers->ip, ip, IP_LEN);
+		strncpy(leechers->port, port, PORT_LEN);
+		strncpy(leechers->fileHash, hash, HASH_LEN);
+		if(leechers==NULL) leechers->next = NULL;
+		else leechers->next = node;
+
+		return;
+	}
+
+	while(node->next!=NULL && atoi(node->next->ip) <= atoi(ip)) node = node->next;
+
+	CurrentLeechers * newNode = malloc(sizeof(CurrentLeechers));
+	strncpy(newNode->ip, ip, IP_LEN);
+	strncpy(newNode->port, port, PORT_LEN);
+	strncpy(newNode->fileHash, hash, HASH_LEN);
+	newNode->next = node->next;
+	node->next = newNode;
+}
+
+bool removeLecher(char * ip, char * port, char * hash) {
+	if(leechers==NULL) return false;
+
+	CurrentLeechers * node = leechers;
+
+	if(atoi(node->ip) == atoi(ip) && atoi(node->port) == atoi(port) && atoi(node->fileHash) == atoi(hash)){
+		leechers = leechers->next;
+		free(node);
+		return true;
+	}
+
+	while(node->next!=NULL && atoi(node->next->ip) < atoi(ip) && atoi(node->next->port) < atoi(port) && atoi(node->next->fileHash) < atoi(hash))
+		node = node->next;
+
+	if(node->next==NULL) return false;
+
+	CurrentLeechers * aux = node->next;
+	node->next = aux->next;
+	free(aux);
+	return true;
 }

@@ -13,5 +13,7 @@ struct Tracker {
 void handleInput(struct selector_key *key);
 void* handleDownload();
 void cleanUpPeers();
+void addLeecher(char * ip, char * port, char * hash);
+bool removeLecher(char * ip, char * port, char * hash);
 
 #endif //TPE_PROTOS_USER_H

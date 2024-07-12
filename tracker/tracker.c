@@ -1,6 +1,7 @@
 #include "include/tracker.h"
 
 #include <pthread.h>
+#include <sys/stat.h>
 
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
@@ -165,7 +166,7 @@ void * deleteUncheckedSeeders() {
       if (list->file->seeders == NULL)
         removeFile(list->file->MD5);
       list = fileList->next;
-    } 
+    }
     sleep(QUANTUM);
     list = fileList;
   }
@@ -180,19 +181,32 @@ int main(int argc,char ** argv) {
     args.socks_port = port;
 
     parse_args(argc, argv, &args);
-
+    struct stat st;
     close(0);
 
+    const char       *err_msg = NULL;
+    selector_status   ss      = SELECTOR_SUCCESS;
+    fd_selector selector      = NULL;
+
+     if(stat("auth",&st)!=0){
+      printf("Creating directory auth\n");
+       if(mkdir("auth",0777)!=0){
+         err_msg="error creating directory";
+         goto no_mutex;
+       }
+    }
     users = fopen("auth/users.csv", "a+");
+    if(users==NULL){
+      err_msg="Error opening auth/users.csv file";
+      goto no_mutex;
+    }
+
     char c;
     if ((c = fgetc(users)) == EOF)
       fputc('\n',users);
     else
       ungetc(c, users);
-    
-    const char       *err_msg = NULL;
-    selector_status   ss      = SELECTOR_SUCCESS;
-    fd_selector selector      = NULL;
+
 
     char portStr[6];
     sprintf(portStr, "%d",args.socks_port);
@@ -269,12 +283,16 @@ int main(int argc,char ** argv) {
   } else if(err_msg) {
     perror(err_msg);
   }
-  if (selector != NULL)
+  if (selector != NULL){
     selector_destroy(selector);
+  }
   selector_close();
-  if (socket >= 0)
+  if (socket >= 0){
     close(socket);
-  fclose(users);
+  }
+  if(users!=NULL){
+    fclose(users);
+  }
   freeUsers();
   freeFileList();
   return 0;

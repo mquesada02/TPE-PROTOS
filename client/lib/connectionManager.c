@@ -217,8 +217,8 @@ void leecherHandler(struct selector_key *key) {
 }
 
 static void quit(struct selector_key *key) {
+    //removeLeecher(ip, port, hash);
     connections--;
-    send(key->fd, CLOSE_MSG, strlen(CLOSE_MSG), 0);
     close(key->fd);
     free(LEECH(key));
 }
@@ -229,6 +229,7 @@ void leecherRead(struct selector_key *key) {
     if(!LEECH(key)->registered) {
         //ssize_t bytes = recv(key->fd, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
         //TODO consultar con el servidor si el usuario:IP es válido
+        //addLeecher(ip, port, hash);
         LEECH(key)->registered = true;
     }
 
@@ -471,6 +472,7 @@ void peerRead(struct selector_key *key) {
     if(PEER(key)->killFlag) {
         if(PEER(key)->killFlagAck) {
             selector_unregister_fd(key->s, key->fd);
+            close(key->fd);
             free(PEER(key));
             return;
         }
@@ -483,7 +485,8 @@ void peerRead(struct selector_key *key) {
     size_t aux = recv(key->fd, buff, LEN_DEFINE_SIZE, 0);
 
     if(aux <= 0) {
-        perror("Failed to connect (recv) to seeder");
+        //perror("Failed to connect (recv) to seeder");
+        PEER(key)->killFlag = true;
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
@@ -497,9 +500,8 @@ void peerRead(struct selector_key *key) {
             totalBytesReceived += bytes;
         } else {
             PEER(key)->killFlag = true;
-            perror("Failed to connect (recv) to seeder");
-            pthread_mutex_unlock(&PEER(key)->mutex);
-            return;
+            //perror("Failed to connect (recv) to seeder");
+            break;
         }
     }
     PEER(key)->readReady = true;
@@ -515,6 +517,7 @@ void peerWrite(struct selector_key *key) {
     if(PEER(key)->killFlag) {
         if(PEER(key)->killFlagAck) {
             selector_unregister_fd(key->s, key->fd);
+            close(key->fd);
             free(PEER(key));
             return;
         }
