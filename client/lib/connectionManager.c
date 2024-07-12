@@ -423,13 +423,15 @@ int setupPeerSocket(const char *ip, const char *port) {
 }
 
 struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
-    int socket = 0;
+    int socket;
+    struct peerMng * mng = NULL;
+
     socket = setupPeerSocket(ip, port);
-    if(socket==-1){
+
+    if(socket == -1){
         perror("Failed to connect to peer");
         goto fail;
     }
-    struct peerMng * mng = NULL;
 
     mng = initializePeerMng();
 
@@ -457,7 +459,6 @@ void peerRead(struct selector_key *key) {
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
-        free(PEER(key));
         return;
     }
 
@@ -476,7 +477,6 @@ void peerRead(struct selector_key *key) {
     size_t totalBytesReceived = 0;
     while (totalBytesReceived < totalBytesIncoming) {
         size_t bytes = recv(key->fd, PEER(key)->responseBuffer + totalBytesReceived, totalBytesIncoming - totalBytesReceived, 0);
-        printf("Received %lu Bytes\n", bytes);
         if (bytes > 0) {
             totalBytesReceived += bytes;
         } else {
@@ -498,7 +498,6 @@ void peerWrite(struct selector_key *key) {
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
-        free(PEER(key));
         return;
     }
 
