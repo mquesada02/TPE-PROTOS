@@ -143,93 +143,91 @@ void* handleDownload() {
     int val;
     while(true) {
         if(downloading && !paused) {
-            if(peersFinished == activePeers) {
+            if (peersFinished == activePeers) {
                 //client_key can't be accessed unless handleInput is already working
                 printf("Connection with seeders lost, attempting to reconnect...\n");
-                if(createSeederConnections(client_key, fileHash) != 0) {
+                if (createSeederConnections(client_key, fileHash) != 0) {
                     printf("Failed to download file : No available seeders\n");
                     freePeers();
                     cancelDownload();
                     downloading = false;
                     paused = false;
-                    break;
                 }
-            }
-            for(int i = 0; i < activePeers; i++) {
-                size_t byte = 0;
-                switch(peers[i].status) {
-                    case READ_READY:
-                        pthread_mutex_lock(&peers[i].peer->mutex);
-                        CHECK_THREAD_DEATH(i)
-                        memset(buff,0,CHUNKSIZE);
-                        if(readFromPeer(peers[i].peer, buff) != -1) {
-                            retrievedChunk(peers[i].currByte, buff);
-                            if(cleanup) {
-                                CLEAN_PEER(i);
-                                if(peersFinished == activePeers) {
-                                    freePeers();
+            } else {
+                for (int i = 0; i < activePeers; i++) {
+                    size_t byte = 0;
+                    switch (peers[i].status) {
+                        case READ_READY:
+                            pthread_mutex_lock(&peers[i].peer->mutex);
+                            CHECK_THREAD_DEATH(i)
+                            memset(buff, 0, CHUNKSIZE);
+                            if (readFromPeer(peers[i].peer, buff) != -1) {
+                                retrievedChunk(peers[i].currByte, buff);
+                                if (cleanup) {
+                                    CLEAN_PEER(i);
+                                    if (peersFinished == activePeers) {
+                                        freePeers();
+                                        activePeers = 0;
+                                        peersFinished = 0;
+                                        downloading = false;
+                                        cleanup = false;
+                                        break;
+                                    }
+                                }
+                                peers[i].status = WAITING;
+                            }
+                            pthread_mutex_unlock(&peers[i].peer->mutex);
+                            break;
+                        case WAITING:
+                            pthread_mutex_lock(&peers[i].peer->mutex);
+                            CHECK_THREAD_DEATH(i)
+                            val = nextChunk(&byte);
+                            if (val == -2) {
+                                for (int j = 0; j < activePeers; j++) {
+                                    if (peers[j].status == WAITING) {
+                                        peers[j].peer->killFlag = true;
+                                        peers[j].status = DEAD;
+                                        peersFinished++;
+                                        pthread_mutex_unlock(&peers[i].peer->mutex);
+                                    }
+                                }
+                                if (peersFinished == activePeers) {
                                     activePeers = 0;
                                     peersFinished = 0;
                                     downloading = false;
-                                    cleanup = false;
-                                    break;
+                                } else {
+                                    cleanup = true;
                                 }
+                                break;
+                            } else if (val == -3) {
+                                pthread_mutex_unlock(&peers[i].peer->mutex);
+                                break;
                             }
-                            peers[i].status = WAITING;
-                        }
-                        pthread_mutex_unlock(&peers[i].peer->mutex);
-                        break;
-                    case WAITING:
-                        pthread_mutex_lock(&peers[i].peer->mutex);
-                        CHECK_THREAD_DEATH(i)
-                        val = nextChunk(&byte);
-                        if(val == -2) {
-                            for(int j = 0; j < activePeers; j++) {
-                                if(peers[j].status == WAITING) {
-                                    peers[j].peer->killFlag = true;
-                                    peers[j].status = DEAD;
-                                    peersFinished++;
-                                    pthread_mutex_unlock(&peers[i].peer->mutex);
-                                }
+                            if (requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE) == -1) {
+                                peers[i].status = READ_READY;
                             }
-                            if(peersFinished == activePeers) {
-                                activePeers = 0;
-                                peersFinished = 0;
-                                downloading = false;
-                            } else {
-                                cleanup = true;
-                            }
-                            break;
-                        }
-
-                        else if(val == -3) {
+                            peers[i].currByte = byte;
+                            peers[i].status = BUSY;
                             pthread_mutex_unlock(&peers[i].peer->mutex);
                             break;
-                        }
-                        if(requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE) == -1) {
-                            peers[i].status = READ_READY;
-                        }
-                        peers[i].currByte = byte;
-                        peers[i].status = BUSY;
-                        pthread_mutex_unlock(&peers[i].peer->mutex);
-                        break;
-                    case BUSY:
-                        pthread_mutex_lock(&peers[i].peer->mutex);
-                        CHECK_THREAD_DEATH(i)
-                        if(peers[i].peer->killFlag) {
-                            peers[i].status = DEAD;
-                            peersFinished++;
+                        case BUSY:
+                            pthread_mutex_lock(&peers[i].peer->mutex);
+                            CHECK_THREAD_DEATH(i)
+                            if (peers[i].peer->killFlag) {
+                                peers[i].status = DEAD;
+                                peersFinished++;
+                                pthread_mutex_unlock(&peers[i].peer->mutex);
+                                printf("Lost connection with peer %d\n", i);
+                                break;
+                            }
+                            if (peers[i].peer->readReady) {
+                                peers[i].status = READ_READY;
+                            }
                             pthread_mutex_unlock(&peers[i].peer->mutex);
-                            printf("Lost connection with peer %d\n", i);
                             break;
-                        }
-                        if(peers[i].peer->readReady) {
-                            peers[i].status = READ_READY;
-                        }
-                        pthread_mutex_unlock(&peers[i].peer->mutex);
-                        break;
-                    case DEAD:
-                        break;
+                        case DEAD:
+                            break;
+                    }
                 }
             }
         }
@@ -535,13 +533,13 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
 
     while(activePeers < MAX_PEERS && availableSeeders > 0) {
         if(getSeeder(peers[activePeers].ip, peers[activePeers].port)) {
-            printf("Added seeder\n");
             struct peerMng *p = addPeer(key, peers[activePeers].ip, peers[activePeers].port);
             if (p != NULL) {
                 peers[activePeers].peer = p;
                 peers[activePeers].status = WAITING;
                 activePeers++;
                 availableSeeders--;
+                printf("Added seeder\n");
             }
         }
     }
