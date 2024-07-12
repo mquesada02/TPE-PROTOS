@@ -25,16 +25,24 @@ enum STATUS {
     DEAD
 };
 
+struct SeedersList {
+    char ip[IP_LEN + 1];
+    char port[PORT_LEN + 1];
+    struct SeedersList * next;
+};
+
 struct Peer {
     struct peerMng *peer;
-    char ip[IP_LEN];
-    char port[PORT_LEN];
+    char ip[IP_LEN + 1];
+    char port[PORT_LEN + 1];
     int status;
     size_t currByte;
 };
 
 #define LOGIN "PLAIN"
 #define FILES "LIST files"
+#define SEEDERS "LIST peers"
+#define SIZE "SIZE"
 #define SEND '\n'
 
 #define LEECH(key) ( (struct Tracker *) (key)->data)
@@ -49,6 +57,8 @@ char inputBuffer[INPUT_SIZE];
 
 struct Peer peers[MAX_PEERS];
 
+struct SeedersList * seedersList = NULL;
+
 struct selector_key *client_key = NULL;
 
 int activePeers = 0;
@@ -58,7 +68,7 @@ bool downloading = false;
 bool paused = false;
 bool cleanup = false;
 
-char fileHash[33];
+char fileHash[HASH_LEN + 1];
 
 struct Command {
     char *cmd;
@@ -84,13 +94,13 @@ struct Command commands[] = {
         {NULL, NULL}
 };
 
-int requestFileSize(char hash[HASH_LEN], size_t *size);
+int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size);
 
-int requestSeeders(char hash[HASH_LEN]);
+int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]);
 
-bool getSeeder(char ip[IP_LEN], char port[PORT_LEN]);
+bool getSeeder(char ip[IP_LEN + 1], char port[PORT_LEN + 1]);
 
-int createSeederConnections(struct selector_key *key, char hash[HASH_LEN]);
+int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]);
 
 void parseCommand(char *input, struct selector_key *key) {
     char *args[INPUT_SIZE / 2];
@@ -270,7 +280,6 @@ void loginHandler(PARAMS) {
     responseBuff[bytes] = '\0';
 
     printf("%s", responseBuff);
-
 }
 
 void filesHandler(PARAMS) {
@@ -318,8 +327,10 @@ void downloadHandler(PARAMS) {
 
     strncpy(fileHash, argv[1], HASH_LEN + 1);
 
+    fileHash[HASH_LEN] = '\0';
+
     size_t fileSize;
-    if(requestFileSize(fileHash, &fileSize) != 0) {
+    if(requestFileSize(key, fileHash, &fileSize) != 0) {
         printf("Failed to download file : Failed to retrieve file info\n");
         return;
     }
@@ -378,26 +389,94 @@ void downloadStatusHandler(PARAMS) {
     printf("Progress: %.2f%% || %lu/%lu bytes \n", percentage, curr, total);
 }
 
-int requestFileSize(char hash[HASH_LEN], size_t *size) {
-    //TODO finish this
+int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size) {
+    size_t requestSize = 256;
+    char requestBuff[requestSize];
+    snprintf(requestBuff, requestSize - 1, "%s %s%c", SIZE, hash, SEND);
+
+    sendMessage(key, requestBuff, strlen(requestBuff));
+
+    size_t responseSize = 256;
+    char responseBuff[responseSize];
+
+    ssize_t bytes = receiveMessage(key, responseBuff, responseSize);
+    if(bytes <= 0) {
+        printf("Connection to tracker unavailable\n");
+        return 0;
+    }
     *size = 0;
+    sscanf(responseBuff, "%lu", size);
     return 1;
 }
 
-int requestSeeders(char hash[HASH_LEN]) {
-    //TODO finish this
-    return 0;
+int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
+    size_t requestSize = 256;
+    char requestBuff[requestSize];
+    snprintf(requestBuff, requestSize - 1, "%s %s%c", SEEDERS, hash, SEND);
+
+    sendMessage(key, requestBuff, strlen(requestBuff));
+
+    size_t responseSize = 256;
+    char responseBuff[responseSize+1];
+    char amount[MAX_INT_LEN] = {0};
+    ssize_t bytes = receiveMessage(key, amount, MAX_INT_LEN);
+    if(bytes <= 0) {
+        printf("Connection to tracker unavailable\n");
+        return 0;
+    }
+
+    int amountVal = atoi(amount)+1; // the +1 is for the "No more files found"
+    int lineCount = 0;
+    int seeders = 0;
+    printf("Retrieving seeders\n");
+    while(lineCount < amountVal) {
+        bytes = receiveMessage(key, responseBuff, responseSize);
+        if (bytes <= 0) continue;
+        responseBuff[bytes] = '\0';
+        struct SeedersList * seeder = malloc(sizeof(struct SeedersList));
+        strncpy(seeder->ip, strtok(responseBuff, ":"), IP_LEN + 1);
+        printf("IP:%s\n", seeder->ip);
+        strncpy(seeder->port, strtok(NULL, "\n\0"), PORT_LEN + 1);
+        printf("PORT:%s", seeder->port);
+        seeder->next = seedersList;
+        seedersList = seeder;
+        seeders++;
+        lineCount++;
+    }
+
+    return seeders;
 }
 
-bool getSeeder(char ip[IP_LEN], char port[PORT_LEN]) {
-    //TODO finish this
-    return false;
+bool getSeeder(char ip[IP_LEN + 1], char port[PORT_LEN + 1]) {
+    if(seedersList == NULL) {
+        return false;
+    }
+    strncpy(ip, seedersList->ip, IP_LEN + 1);
+    strncpy(port, seedersList->port, PORT_LEN + 1);
+    struct SeedersList *aux = seedersList;
+    seedersList = seedersList->next;
+    free(aux);
+    return true;
 }
 
-int createSeederConnections(struct selector_key *key, char hash[HASH_LEN]) {
-    int availableSeeders = requestSeeders(hash);
+void clearSeederList() {
+    while(seedersList != NULL) {
+        struct SeedersList *aux = seedersList;
+        seedersList = seedersList->next;
+        free(aux);
+    }
+}
+
+int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
+    int availableSeeders = requestSeeders(key, hash);
     activePeers = 0;
     peersFinished = 0;
+
+    if(availableSeeders == 0) {
+        printf("No seeders for the specified file\n");
+        return 1;
+    }
+
     while(activePeers < MAX_PEERS && availableSeeders > 0) {
         if(getSeeder(peers[activePeers].ip, peers[activePeers].port)) {
             struct peerMng *p = addPeer(key, peers[activePeers].ip, peers[activePeers].port);
@@ -409,11 +488,14 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN]) {
             }
         }
     }
+
     if(activePeers > 0) {
         downloading = true;
         paused = false;
         cleanup = false;
         return 0;
     }
+
+    clearSeederList();
     return 1;
 }
