@@ -18,6 +18,8 @@
 
 void tracker_handler(struct selector_key * key);
 
+char * name(char * md5);
+
 char * getUser(char* username, char* users);
 
 int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr);
