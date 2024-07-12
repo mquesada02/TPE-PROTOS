@@ -15,6 +15,7 @@
 #define MAX_PEERS 5
 #define MAX_INT_LEN 12
 #define HASH_LEN 32
+#define MAX_FILE_LENGTH 256
 #define IP_LEN 15
 #define PORT_LEN 5
 
@@ -44,6 +45,7 @@ struct Peer {
 #define FILES "LIST files"
 #define SEEDERS "LIST peers"
 #define SIZE "SIZE"
+#define NAME "NAME"
 #define SEND '\n'
 
 #define ATTACHMENT(key) ( (struct Tracker *) (key)->data)
@@ -94,6 +96,8 @@ struct Command commands[] = {
         {.cmd = "dstatus", .handler = downloadStatusHandler},
         {NULL, NULL}
 };
+
+int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buff);
 
 int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size);
 
@@ -333,8 +337,12 @@ void downloadHandler(PARAMS) {
     strncpy(fileHash, argv[1], HASH_LEN + 1);
 
     fileHash[HASH_LEN] = '\0';
-
+    char name[MAX_FILE_LENGTH+1] = {0};
     size_t fileSize;
+    if(requestFileName(key, fileHash, name) != 0) {
+        printf("Failed to download file : Failed to retrieve file name info\n");
+        return;
+    }
     if(requestFileSize(key, fileHash, &fileSize) != 0) {
         printf("Failed to download file : Failed to retrieve file info\n");
         return;
@@ -345,7 +353,7 @@ void downloadHandler(PARAMS) {
         return;
     }
 
-    initFileBuffer(fileHash, fileSize);
+    initFileBuffer(name, fileSize);
 
     printf("Starting download\n");
 }
@@ -392,6 +400,26 @@ void downloadStatusHandler(PARAMS) {
     size_t total = getCurrentDownloadedFileSize();
     double percentage = ((double)curr / (double)total) * 100.0;
     printf("Progress: %.2f%% || %lu/%lu bytes \n", percentage, curr, total);
+}
+
+int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buff) {
+    size_t requestSize = 256;
+    char requestBuff[requestSize];
+    snprintf(requestBuff, requestSize - 1, "%s %s%c", NAME, hash, SEND);
+
+    sendMessage(key, requestBuff, strlen(requestBuff));
+
+    size_t responseSize = 256;
+    char responseBuff[responseSize];
+
+    ssize_t bytes = receiveMessage(key, responseBuff, responseSize);
+    if(bytes <= 0) {
+        printf("Connection to tracker unavailable\n");
+        return 1;
+    }
+    responseBuff[bytes] = '\0';
+    strcpy(buff, requestBuff);
+    return 0;
 }
 
 int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size) {
