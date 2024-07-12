@@ -184,16 +184,16 @@ int main(int argc,char ** argv){
     }
 
     finally:
-    pthread_mutex_destroy(&sendingMutex);
-    no_mutex:
-    cancelDownload();
-    syslog(LOG_NOTICE,"Closing client application");
     pthread_mutex_lock(&sendingMutex);
-    pthread_cancel(updateTID);
+    //pthread_cancel(updateTID);
     if (tracker->socket >= 0) {
         sendto(tracker->socket, "QUIT\n", strlen("QUIT\n"),0,(struct sockaddr*)tracker->trackerAddr, sizeof(struct sockaddr_in));
     }
     pthread_mutex_unlock(&sendingMutex);
+    pthread_mutex_destroy(&sendingMutex);
+    no_mutex:
+    cancelDownload();
+    syslog(LOG_NOTICE,"Closing client application");
     closelog();
     if(ss != SELECTOR_SUCCESS) {
         fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg, ss == SELECTOR_IO ? strerror(errno): selector_error(ss));

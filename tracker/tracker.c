@@ -19,8 +19,7 @@
 typedef struct UserNode{
     char username[MAX_USERNAME_SIZE];
     struct UserNode* next;
-    pthread_t killerTid;
-    struct TArg * args;
+    bool checked;
 } UserNode;
 
 
@@ -48,11 +47,6 @@ typedef struct File{
     UserNode * leechers;
 } File;
 
-typedef struct TArg {
-  File * file;
-  UserNode * value;
-} TArg;
-
 typedef struct FileList{
     File* file;
     struct FileList* next;
@@ -65,6 +59,8 @@ size_t fileListSize = 0;
 static bool done = false;
 FILE * users = NULL;
 
+void removeFile(char * MD5);
+
 static void sigterm_handler(const int signal) {
     printf("Signal %d, cleaning up and exiting\n",signal);
     done = true;
@@ -75,6 +71,33 @@ bool lineConfirms(int fd, struct sockaddr_storage client_addr){
 	socklen_t client_addr_len = sizeof(client_addr);
 	recvfrom(fd, buff, CONF_BUFF_SIZE, 0, (struct sockaddr *) &client_addr, &client_addr_len);
 	return (buff[0]=='y' || buff[0]=='Y') && buff[1]=='\n';
+}
+
+UserNode * _deleteUncheckedSeeders(UserNode* node) {
+  if (node == NULL) return node;
+  if (!node->checked) {
+    UserNode * aux = node->next;
+    free(node);
+    return aux;
+  }
+  node->checked = false;
+  node->next = _deleteUncheckedSeeders(node->next);
+  return node;
+}
+
+void * deleteUncheckedSeeders() {
+  FileList *list = fileList;
+  while(!done) {
+    while(list != NULL && list->file != NULL) {
+      list->file->seeders = _deleteUncheckedSeeders(list->file->seeders);
+      if (list->file->seeders == NULL)
+        removeFile(list->file->MD5);
+      list = fileList->next;
+    } 
+    sleep(QUANTUM);
+    list = fileList;
+  }
+  return NULL;
 }
 
 int main(int argc,char ** argv){
@@ -113,7 +136,7 @@ int main(int argc,char ** argv){
         .tv_sec  = 10,
         .tv_nsec = 0,
     }
-  };
+    };
 
   if (selector_init(&conf) != 0) {
     err_msg = "Unable to initialize selector.";
@@ -145,6 +168,13 @@ int main(int argc,char ** argv){
     perror("Failed to initialize mutex");
     goto mutex;
   }
+
+  pthread_t garbageCollectorTid;
+  if(pthread_create(&garbageCollectorTid, NULL, deleteUncheckedSeeders, NULL)!=0){
+    perror("Failed to create garbageCollectior thread");
+    goto finally;
+  }
+
   while(!done) {
     err_msg = NULL;
     ss = selector_select(selector);
@@ -156,7 +186,7 @@ int main(int argc,char ** argv){
   if (err_msg == NULL) {
     err_msg = "Closing...";
   }
-    
+  pthread_join(garbageCollectorTid, NULL);
   finally:
   pthread_mutex_destroy(&filesMutex);
   mutex:
@@ -235,7 +265,7 @@ FileList * _removeFileSeeder(FileList * node, char * username) {
   node->next = _removeFileSeeder(node->next, username);
   if (node->file->seeders == NULL) {
     FileList * aux = node->next;
-    free(node);
+    removeFile(node->file->MD5);
     return aux;
   }
   return node;
@@ -264,24 +294,6 @@ void removeFile(char * MD5) {
   fileList = _removeFile(fileList, MD5);
 }
 
-void * deleteAfterQuantum(void * arg) {
-  pthread_mutex_lock(&filesMutex);
-  TArg * targ = (TArg *) arg;
-  File * file = targ->file;
-  UserNode * node = targ->value;
-  free(arg);
-  pthread_mutex_unlock(&filesMutex);
-  sleep(QUANTUM);
-  pthread_mutex_lock(&filesMutex);
-  file->seeders = removeSeeder(file->seeders, node->username);
-  if (file->seeders == NULL) {
-    removeFile(file->MD5);
-  }
-  pthread_mutex_unlock(&filesMutex);
-
-  return NULL;
-}
-
 UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * inserted) {
   int cmp;
   if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
@@ -290,25 +302,12 @@ UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * i
     strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
     newNode->username[MAX_USERNAME_SIZE-1] = '\0';
     newNode->next = node;
-    TArg * arg = malloc(sizeof(TArg));
-    newNode->args = arg;
-    arg->file = file;
-    arg->value = newNode;
+    newNode->checked = true;
     *inserted = true;
-    pthread_create(&newNode->killerTid, NULL, deleteAfterQuantum, arg);
-    pthread_detach(newNode->killerTid);
     return newNode;
   }
   if (cmp == 0) {
-    pthread_mutex_lock(&filesMutex);
-    pthread_cancel(node->killerTid);
-    pthread_mutex_unlock(&filesMutex);
-    TArg * arg = malloc(sizeof(TArg));
-    arg->file = file;
-    arg->value = node;
-    node->args = arg;
-    pthread_create(&node->killerTid, NULL, deleteAfterQuantum, arg);
-    pthread_detach(node->killerTid);
+    node->checked = true;
   }
   if (cmp < 0) {
     node->next = _insertSeeder(file, node->next, username, inserted);
@@ -813,6 +812,3 @@ int loginUser(char * username, char * password, int fd, struct sockaddr_storage 
   return false;
 }
 
-void changePassword(char * oldPassword, char * newPassword){
-
-}
