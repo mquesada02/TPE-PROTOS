@@ -102,7 +102,7 @@ int main(int argc,char ** argv){
     char portStr[6];
     sprintf(portStr, "%d",args.socks_port);
     int socket = setupUDPServerSocket(portStr,&err_msg);
-    if (socket < 0) goto finally;
+    if (socket < 0) goto no_mutex;
 
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT, sigterm_handler);
@@ -117,13 +117,13 @@ int main(int argc,char ** argv){
 
   if (selector_init(&conf) != 0) {
     err_msg = "Unable to initialize selector.";
-    goto finally;
+    goto no_mutex;
   }
 
   selector = selector_new(INITIAL_SELECTOR);
   if (selector == NULL) {
     err_msg = "Unable to create selector";
-    goto finally;
+    goto no_mutex;
   }
 
     const struct fd_handler tracker = {
@@ -135,15 +135,15 @@ int main(int argc,char ** argv){
     ss = selector_register(selector,socket,&tracker,OP_READ,NULL);
   if (ss != SELECTOR_SUCCESS) {
     err_msg = "Unable to register FD for IPv4/IPv6.";
-    goto finally;
+    goto no_mutex;
   }
   if (pthread_mutex_init(&usersMutex, NULL) != 0) {
     perror("Failed to initialize mutex");
-    goto finally;
+    goto no_mutex;
   }
   if (pthread_mutex_init(&filesMutex, NULL) != 0) {
     perror("Failed to initialize mutex");
-    goto finally;
+    goto mutex;
   }
   while(!done) {
     err_msg = NULL;
@@ -158,6 +158,10 @@ int main(int argc,char ** argv){
   }
     
   finally:
+  pthread_mutex_destroy(&filesMutex);
+  mutex:
+  pthread_mutex_destroy(&usersMutex);
+  no_mutex:
   if(ss != SELECTOR_SUCCESS) {
     fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg, ss == SELECTOR_IO ? strerror(errno): selector_error(ss));
   } else if(err_msg) {
@@ -171,8 +175,6 @@ int main(int argc,char ** argv){
   fclose(users);
   freeUsers();
   freeFileList();
-  pthread_mutex_destroy(&filesMutex);
-  pthread_mutex_destroy(&usersMutex);
   return 0;
 }
 
