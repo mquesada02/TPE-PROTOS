@@ -28,7 +28,7 @@
 
 #define INT_LENGTH 10
 
-#define QUANTUM 15
+#define QUANTUM 5
 
 
 
