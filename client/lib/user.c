@@ -424,7 +424,7 @@ int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buf
         printf("Connection to tracker unavailable\n");
         return 1;
     }
-    responseBuff[bytes] = '\0';
+    responseBuff[bytes-1] = '\0';
     strcpy(buff, responseBuff);
     return 0;
 }
