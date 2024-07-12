@@ -16,7 +16,6 @@
 #define MAX_INT_LEN 12
 #define HASH_LEN 32
 #define IP_LEN 15
-#define USERNAME_LEN 256
 #define PORT_LEN 5
 
 enum STATUS {
@@ -30,7 +29,6 @@ struct Peer {
     struct peerMng *peer;
     char ip[IP_LEN];
     char port[PORT_LEN];
-    char username[USERNAME_LEN];
     int status;
     size_t currByte;
 };
@@ -90,7 +88,7 @@ int requestFileSize(char hash[HASH_LEN], size_t *size);
 
 int requestSeeders(char hash[HASH_LEN]);
 
-bool getSeeder(char ip[IP_LEN], char port[PORT_LEN], char username[USERNAME_LEN]);
+bool getSeeder(char ip[IP_LEN], char port[PORT_LEN]);
 
 int createSeederConnections(struct selector_key *key, char hash[HASH_LEN]);
 
@@ -391,7 +389,7 @@ int requestSeeders(char hash[HASH_LEN]) {
     return 0;
 }
 
-bool getSeeder(char ip[IP_LEN], char port[PORT_LEN], char username[USERNAME_LEN]) {
+bool getSeeder(char ip[IP_LEN], char port[PORT_LEN]) {
     //TODO finish this
     return false;
 }
@@ -401,7 +399,7 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN]) {
     activePeers = 0;
     peersFinished = 0;
     while(activePeers < MAX_PEERS && availableSeeders > 0) {
-        if(getSeeder(peers[activePeers].ip, peers[activePeers].port, peers[activePeers].username)) {
+        if(getSeeder(peers[activePeers].ip, peers[activePeers].port)) {
             struct peerMng *p = addPeer(key, peers[activePeers].ip, peers[activePeers].port);
             if (p != NULL) {
                 peers[activePeers].peer = p;

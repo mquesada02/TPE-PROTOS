@@ -41,6 +41,8 @@ void cleanupPeerMng(struct peerMng *peer);
 
 struct leecherMng {
 
+    bool registered;
+
     char requestBuffer[REQUEST_BUFFER_SIZE];
 
     char responseBuffer[CHUNKSIZE + 1];
@@ -192,6 +194,8 @@ void leecherHandler(struct selector_key *key) {
         goto fail;
     }
 
+    mng->registered = false;
+
     memset(mng, 0, sizeof(*mng));
 
 
@@ -221,6 +225,12 @@ static void quit(struct selector_key *key) {
 
 
 void leecherRead(struct selector_key *key) {
+
+    if(!LEECH(key)->registered) {
+        //ssize_t bytes = recv(key->fd, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
+        //TODO consultar con el servidor si el usuario:IP es válido
+        LEECH(key)->registered = true;
+    }
 
     memset(LEECH(key)->requestBuffer, 0, REQUEST_BUFFER_SIZE);
 
