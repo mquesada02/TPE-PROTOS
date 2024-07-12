@@ -10,6 +10,7 @@
 #define MAX_FILENAME 256
 #define INT_LEN 12
 #define QUANTUM 10
+#define CONF_BUFF_SIZE 32
 
 #define IP_LEN 16
 #define PORT_LEN 6
@@ -62,6 +63,13 @@ FILE * users = NULL;
 static void sigterm_handler(const int signal) {
     printf("Signal %d, cleaning up and exiting\n",signal);
     done = true;
+}
+
+bool lineConfirms(int fd, struct sockaddr_storage client_addr){
+	char buff[CONF_BUFF_SIZE];
+	socklen_t client_addr_len = sizeof(client_addr);
+	recvfrom(fd, buff, CONF_BUFF_SIZE, 0, (struct sockaddr *) &client_addr, &client_addr_len);
+	return (buff[0]=='y' || buff[0]=='Y') && buff[1]=='\n';
 }
 
 int main(int argc,char ** argv){
@@ -524,7 +532,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       char * name = strtok(NULL, " ");
       char * bytes = strtok(NULL, " ");
       char * hash = strtok(NULL, "\n");
-      registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
+	  registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
     } else 
     if (strcmp(cmd, "CHECK") == 0) {
       char * ip = strtok(NULL, ":");
@@ -591,8 +599,8 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
     if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
       char * user = strtok(NULL, ":");
       char * password = strtok(NULL, "\n");
-      int loginState = 0;
-      if ((loginState = loginUser(user, password))) {
+      int loginState = loginUser(user, password, fd, client_addr);
+      if (loginState > 0 && loginState < 3) {
         if (state == NULL) 
           state = calloc(1,sizeof(struct TrackerState));
         UserState node = (UserState) {.next = NULL };
@@ -604,7 +612,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
           sendto(fd, "Logged in successfully\n", strlen("Logged in successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
         else
           sendto(fd, "Registered successfully\n", strlen("Registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-      } else {
+      } else if (loginState !=3){
           sendto(fd, "Incorrect password for user\n", strlen("Incorrect password for user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
       }
     } else if (strcmp(cmd, "REGISTER") != 0){
@@ -651,7 +659,7 @@ char * getUser(char* username, char* usersS) {
   return strstr(usersS, usernameComma);
 }
 
-int loginUser(char * username, char * password) {
+int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr) {
   if (users == NULL) return false;
   fseek(users, 0L, SEEK_END);
   int usersStrLen = ftell(users);
@@ -660,9 +668,21 @@ int loginUser(char * username, char * password) {
   size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
   usersStr[size] = '\0';
   char* user = getUser(username, usersStr);
+
   if (user == NULL) {
-    registerUser(username, password);
-    return 2; // true but with a flag
+	int len = strlen("Create user ")+MAX_USERNAME_SIZE+ strlen("? (y/n): ")+1;
+	  char msg[len];
+	  strcpy(msg, "Create user ");
+	  strcat(msg, username);
+      strcat(msg, "? (y/n): ");
+	  sendto(fd, msg, strlen(msg), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+
+      if(lineConfirms(fd, client_addr)){
+        registerUser(username, password);
+		return 2;
+      }
+	  sendto(fd, "New user not registered.\n", strlen("New user not registered.\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+	  return 3;
   } else {
     strtok(user, ",");
     char * passwordStr = strtok(NULL, "\n");

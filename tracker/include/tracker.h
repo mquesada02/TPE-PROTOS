@@ -20,7 +20,7 @@ void tracker_handler(struct selector_key * key);
 
 char * getUser(char* username, char* users);
 
-int loginUser(char * username, char * password);
+int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr);
 
 void registerUser(char * username, char * password);
 
