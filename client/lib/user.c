@@ -69,7 +69,6 @@ int peersFinished = 0;
 
 bool downloading = false;
 bool paused = false;
-bool cleanup = false;
 
 char fileHash[HASH_LEN + 1];
 
@@ -156,25 +155,13 @@ void* handleDownload() {
             } else {
                 for (int i = 0; i < activePeers; i++) {
                     size_t byte = 0;
-                    switch (peers[i].status) {
+                    switch(peers[i].status) {
                         case READ_READY:
                             pthread_mutex_lock(&peers[i].peer->mutex);
                             CHECK_THREAD_DEATH(i)
                             memset(buff, 0, CHUNKSIZE);
-                            if (readFromPeer(peers[i].peer, buff) != -1) {
+                            if(readFromPeer(peers[i].peer, buff) != -1) {
                                 retrievedChunk(peers[i].currByte, buff);
-                                if (cleanup) {
-                                    CLEAN_PEER(i);
-                                    if (peersFinished == activePeers) {
-                                        freePeers();
-                                        activePeers = 0;
-                                        peersFinished = 0;
-                                        downloading = false;
-                                        cleanup = false;
-                                        printf("Download finished\n");
-                                        break;
-                                    }
-                                }
                                 peers[i].status = WAITING;
                             }
                             pthread_mutex_unlock(&peers[i].peer->mutex);
@@ -196,8 +183,8 @@ void* handleDownload() {
                                     activePeers = 0;
                                     peersFinished = 0;
                                     downloading = false;
-                                } else {
-                                    cleanup = true;
+                                    printf("Download finished\n");
+                                    break;
                                 }
                                 break;
                             } else if (val == -3) {
@@ -266,7 +253,6 @@ void cleanUpPeers() {
             peersFinished++;
         }
     }
-    freePeers();
 }
 
 void loginHandler(PARAMS) {
@@ -390,7 +376,8 @@ void resumeHandler(PARAMS) {
 
 void cancelHandler(PARAMS) {
     if(downloading) {
-        paused = true;
+        downloading = false;
+        paused = false;
         cancelDownload();
         for(int i=0; i<activePeers; i++) {
             if(peers[i].status != DEAD) {
@@ -399,7 +386,9 @@ void cancelHandler(PARAMS) {
                 peers[i].peer = NULL;
             }
         }
-        printf("Download Cancelled\n");
+        printf("Download cancelled\n");
+    } else {
+        printf("Nothing to cancel\n");
     }
 }
 
@@ -552,7 +541,6 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
     if(activePeers > 0) {
         downloading = true;
         paused = false;
-        cleanup = false;
         return 0;
     }
 
