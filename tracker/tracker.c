@@ -706,6 +706,13 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
 	  sprintf(buffer, "%s\n", nameStr);
       sendto(fd, buffer, bufferSize, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 	}
+	else if (strcmp(cmd, "USERNAME") == 0) {
+	  char * ip = strtok(NULL, " ");
+	  char * port = strtok(NULL, "\n");
+	  char * username = getUsernameFromIpNPort(ip, port);
+	  if(username==NULL) sendto(fd, "No user\n", strlen("No user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+	  else sendto(fd, username, strlen(username), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+	}
   } else {
     if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
       char * user = strtok(NULL, ":");

@@ -18,6 +18,7 @@
 #define MAX_FILE_LENGTH 256
 #define IP_LEN 15
 #define PORT_LEN 5
+#define MAX_USERNAME_SIZE (32+1)
 
 enum STATUS {
     READ_READY,
@@ -47,6 +48,7 @@ struct Peer {
 #define SIZE "SIZE"
 #define NAME "NAME"
 #define SEND '\n'
+#define USERNAME "USERNAME"
 
 #define ATTACHMENT(key) ( (struct Tracker *) (key)->data)
 
@@ -85,6 +87,7 @@ void pauseHandler(PARAMS);
 void resumeHandler(PARAMS);
 void cancelHandler(PARAMS);
 void downloadStatusHandler(PARAMS);
+void seedersHandler(PARAMS);
 
 struct Command commands[] = {
         {.cmd = "login", .handler = loginHandler},
@@ -94,10 +97,13 @@ struct Command commands[] = {
         {.cmd = "resume", .handler = resumeHandler},
         {.cmd = "cancel", .handler = cancelHandler},
         {.cmd = "dstatus", .handler = downloadStatusHandler},
+		{.cmd = "seeders", .handler = seedersHandler},
         {NULL, NULL}
 };
 
 int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buff);
+
+int requestUsername(struct selector_key *key, char * ip, char * port, char * buff);
 
 int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size);
 
@@ -414,6 +420,20 @@ void downloadStatusHandler(PARAMS) {
     printf("Progress: %.2f%% || %lu/%lu bytes \n", percentage, curr, total);
 }
 
+void seedersHandler(PARAMS) {
+	if(activePeers == 0) printf("There are currently no seeder connections\n");
+	else {
+		printf("Current seeder connections (downloading file %s):\n", fileHash);
+		char username[MAX_USERNAME_SIZE];
+		for(int i = 0; i<activePeers; i++){
+			if(peers[i].status != DEAD){
+				if(requestUsername(key, peers[i].ip, peers[i].port, username)==0)
+					printf("- %s\n", username);
+			}
+		}
+	}
+}
+
 int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buff) {
     size_t requestSize = 256;
     char requestBuff[requestSize];
@@ -430,6 +450,27 @@ int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buf
         return 1;
     }
     responseBuff[bytes-1] = '\0';
+    strcpy(buff, responseBuff);
+    return 0;
+}
+
+int requestUsername(struct selector_key *key, char * ip, char * port, char * buff) {
+	size_t requestSize = 256;
+    char requestBuff[requestSize];
+    snprintf(requestBuff, requestSize - 1, "%s %s %s%c", USERNAME, ip, port, SEND);
+
+    sendMessage(key, requestBuff, strlen(requestBuff));
+
+    size_t responseSize = MAX_USERNAME_SIZE;
+    char responseBuff[responseSize];
+
+    ssize_t bytes = receiveMessage(key, responseBuff, responseSize);
+    if(bytes <= 0) {
+        printf("Connection to tracker unavailable\n");
+        return 1;
+    }
+	if(strcmp("No user\n", responseBuff)==0) return 2;
+    responseBuff[bytes] = '\0';
     strcpy(buff, responseBuff);
     return 0;
 }
