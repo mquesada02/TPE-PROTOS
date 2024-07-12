@@ -418,7 +418,7 @@ int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buf
         return 1;
     }
     responseBuff[bytes] = '\0';
-    strcpy(buff, requestBuff);
+    strcpy(buff, responseBuff);
     return 0;
 }
 
