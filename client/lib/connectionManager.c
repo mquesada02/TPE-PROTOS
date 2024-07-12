@@ -469,6 +469,7 @@ void peerRead(struct selector_key *key) {
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
+        free(PEER(key));
         return;
     }
 
@@ -508,6 +509,7 @@ void peerWrite(struct selector_key *key) {
 
     if(PEER(key)->killFlag) {
         selector_unregister_fd(key->s, key->fd);
+        free(PEER(key));
         return;
     }
 
