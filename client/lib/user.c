@@ -431,7 +431,7 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
         return 0;
     }
 
-    int amountVal = atoi(amount)+1; // the +1 is for the "No more files found"
+    int amountVal = atoi(amount); // the +1 is for the "No more files found"
     int lineCount = 0;
     int seeders = 0;
     printf("Retrieving seeders\n");
