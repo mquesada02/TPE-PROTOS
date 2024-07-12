@@ -265,15 +265,20 @@ void removeFile(char * MD5) {
 }
 
 void * deleteAfterQuantum(void * arg) {
+  pthread_mutex_lock(&filesMutex);
   TArg * targ = (TArg *) arg;
+  File * file = targ->file;
+  UserNode * node = targ->value;
+  free(arg);
+  pthread_mutex_unlock(&filesMutex);
   sleep(QUANTUM);
   pthread_mutex_lock(&filesMutex);
-  targ->file->seeders = removeSeeder(targ->file->seeders, targ->value->username);
-  if (targ->file->seeders == NULL) {
-    removeFile(targ->file->MD5);
+  file->seeders = removeSeeder(file->seeders, node->username);
+  if (file->seeders == NULL) {
+    removeFile(file->MD5);
   }
   pthread_mutex_unlock(&filesMutex);
-  free(arg);
+
   return NULL;
 }
 
@@ -295,11 +300,12 @@ UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * i
     return newNode;
   }
   if (cmp == 0) {
+    pthread_mutex_lock(&filesMutex);
+    pthread_cancel(node->killerTid);
+    pthread_mutex_unlock(&filesMutex);
     TArg * arg = malloc(sizeof(TArg));
     arg->file = file;
     arg->value = node;
-    pthread_cancel(node->killerTid);
-    free(node->args);
     node->args = arg;
     pthread_create(&node->killerTid, NULL, deleteAfterQuantum, arg);
     pthread_detach(node->killerTid);

@@ -278,7 +278,7 @@ void loginHandler(PARAMS) {
     size_t responseSize = 256;
     char responseBuff[responseSize+1];
     ssize_t bytes;
-    if((bytes = receiveMessage(key, responseBuff, responseSize)) == 0) {
+    if((bytes = receiveMessage(key, responseBuff, responseSize)) <= 0) {
         printf("Connection unavailable\n");
         return;
     }
