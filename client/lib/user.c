@@ -160,6 +160,7 @@ void* handleDownload() {
                 for (int i = 0; i < activePeers; i++) {
                     size_t byte = 0;
                     switch(peers[i].status) {
+
                         case READ_READY:
                             pthread_mutex_lock(&peers[i].peer->mutex);
                             CHECK_THREAD_DEATH(i)
@@ -170,6 +171,7 @@ void* handleDownload() {
                             }
                             pthread_mutex_unlock(&peers[i].peer->mutex);
                             break;
+
                         case WAITING:
                             pthread_mutex_lock(&peers[i].peer->mutex);
                             CHECK_THREAD_DEATH(i)
@@ -178,6 +180,7 @@ void* handleDownload() {
                                 for (int j = 0; j < activePeers; j++) {
                                     if (peers[j].status == WAITING) {
                                         peers[j].peer->killFlag = true;
+                                        peers[j].peer->killFlagAck = true;
                                         peers[j].status = DEAD;
                                         peersFinished++;
                                         pthread_mutex_unlock(&peers[i].peer->mutex);
@@ -202,10 +205,11 @@ void* handleDownload() {
                             peers[i].status = BUSY;
                             pthread_mutex_unlock(&peers[i].peer->mutex);
                             break;
+
                         case BUSY:
                             pthread_mutex_lock(&peers[i].peer->mutex);
-                            CHECK_THREAD_DEATH(i)
                             if (peers[i].peer->killFlag) {
+                                peers[i].peer->killFlagAck = true;
                                 peers[i].status = DEAD;
                                 peersFinished++;
                                 pthread_mutex_unlock(&peers[i].peer->mutex);
@@ -217,6 +221,7 @@ void* handleDownload() {
                             }
                             pthread_mutex_unlock(&peers[i].peer->mutex);
                             break;
+
                         case DEAD:
                             break;
                     }
@@ -252,6 +257,7 @@ void cleanUpPeers() {
     for (int j = 0; j < activePeers; j++) {
         if (peers[j].status != DEAD) {
             peers[j].peer->killFlag = true;
+            peers[j].peer->killFlagAck = true;
             peers[j].peer = NULL;
             peers[j].status = DEAD;
             peersFinished++;
@@ -386,6 +392,7 @@ void cancelHandler(PARAMS) {
         for(int i=0; i<activePeers; i++) {
             if(peers[i].status != DEAD) {
                 peers[i].peer->killFlag = true;
+                peers[i].peer->killFlagAck = true;
                 peers[i].status = DEAD;
                 peers[i].peer = NULL;
             }

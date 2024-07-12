@@ -386,6 +386,7 @@ struct peerMng *initializePeerMng() {
     peer->readReady = false;
     memset(peer->responseBuffer,0,sizeof(peer->responseBuffer));
     peer->killFlag = false;
+    peer->killFlagAck = false;
 
     if (pthread_mutex_init(&peer->mutex, NULL) != 0) {
         perror("Failed to initialize mutex");
@@ -468,8 +469,12 @@ void peerRead(struct selector_key *key) {
     pthread_mutex_lock(&PEER(key)->mutex);
 
     if(PEER(key)->killFlag) {
-        selector_unregister_fd(key->s, key->fd);
-        free(PEER(key));
+        if(PEER(key)->killFlagAck) {
+            selector_unregister_fd(key->s, key->fd);
+            free(PEER(key));
+            return;
+        }
+        pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
 
@@ -508,8 +513,12 @@ void peerWrite(struct selector_key *key) {
     pthread_mutex_lock(&PEER(key)->mutex);
 
     if(PEER(key)->killFlag) {
-        selector_unregister_fd(key->s, key->fd);
-        free(PEER(key));
+        if(PEER(key)->killFlagAck) {
+            selector_unregister_fd(key->s, key->fd);
+            free(PEER(key));
+            return;
+        }
+        pthread_mutex_unlock(&PEER(key)->mutex);
         return;
     }
 
