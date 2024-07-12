@@ -33,6 +33,7 @@ struct TrackerState {
   UserState * first;
 };
 
+pthread_mutex_t mutex;
 typedef struct File{
     char name[MAX_FILENAME];
     int size; //bytes
@@ -53,6 +54,7 @@ typedef struct FileList{
 
 struct TrackerState * state = NULL;
 FileList * fileList = NULL;
+size_t fileListSize = 0;
 
 static bool done = false;
 FILE * users = NULL;
@@ -117,7 +119,10 @@ int main(int argc,char ** argv){
     err_msg = "Unable to register FD for IPv4/IPv6.";
     goto finally;
   }
-
+  if (pthread_mutex_init(&mutex, NULL) != 0) {
+    perror("Failed to initialize mutex");
+    goto finally;
+  }
   while(!done) {
     err_msg = NULL;
     ss = selector_select(selector);
@@ -144,6 +149,7 @@ int main(int argc,char ** argv){
   fclose(users);
   freeUsers();
   freeFileList();
+  pthread_mutex_destroy(&mutex);
   return 0;
 }
 
@@ -161,7 +167,9 @@ UserState * _insertUser(UserState * node, UserState value) {
 }
 
 void insertUser(UserState value) {
+  pthread_mutex_lock(&mutex);
   state->first = _insertUser(state->first, value);
+  pthread_mutex_unlock(&mutex);
 }
 
 char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port) {
@@ -215,6 +223,7 @@ FileList * _removeFile(FileList * file, char * MD5) {
     if (file->file)
       free(file->file);
     free(file);
+    fileListSize--;
     return aux;
   }
   file->next = _removeFile(file->next, MD5);
@@ -228,10 +237,12 @@ void removeFile(char * MD5) {
 void * deleteAfterQuantum(void * arg) {
   TArg * targ = (TArg *) arg;
   sleep(QUANTUM);
+  pthread_mutex_lock(&mutex);
   targ->file->seeders = removeSeeder(targ->file->seeders, targ->value->username);
   if (targ->file->seeders == NULL) {
     removeFile(targ->file->MD5);
   }
+  pthread_mutex_unlock(&mutex);
   free(arg);
   return NULL;
 }
@@ -276,6 +287,7 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
     newNode->file->leechers = NULL;
     strcpy(newNode->file->MD5, hash);
     newNode->file->seeders = insertSeeder(newNode->file, newNode->file->seeders, ip, port);
+    fileListSize++;
     //sendto(fd, "You are the first to register this file\n", strlen("You are the first to register this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     return newNode;
   }
@@ -292,7 +304,10 @@ FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash
 }
 
 void registerFile(char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
+  pthread_mutex_lock(&mutex);
   fileList = _registerFile(fileList, name, bytes, hash, ip, port, fd, client_addr);
+  pthread_mutex_unlock(&mutex);
+
 }
 
 void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, char * port) {
@@ -307,7 +322,9 @@ void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, 
 }
 
 void getIpNPortFromUsername(char * username, char * ip, char * port) {
+  pthread_mutex_lock(&mutex);
   _getIpNPortFromUsername(state->first, username, ip, port);
+  pthread_mutex_unlock(&mutex);
 }
 
 void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr) {
@@ -337,7 +354,10 @@ void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage cli
 }
 
 void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr) {
-  if(fileList == NULL) return;
+  if(fileList == NULL) {
+    sendto(fd, "No more files found\n", strlen("No more files found\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    return;
+  }
 
   char buff[strlen(fileList->file->name) + INT_LEN + MD5_SIZE + 8];
   int len = sprintf(buff, "%s - %d - %s\n", fileList->file->name, fileList->file->size, fileList->file->MD5);
@@ -450,8 +470,11 @@ void findNAddLeecher(FileList * node, char * hash, char * username) {
 }
 
 void addLeecher(char * hash, char * ip, char * port) {
+  pthread_mutex_lock(&mutex);
   char * username = getUsernameFromIpNPort(ip, port);
- findNAddLeecher(fileList, hash, username);
+  findNAddLeecher(fileList, hash, username);
+  pthread_mutex_unlock(&mutex);
+
 }
 
 bool userIsLoggedIn(char * ip, char * port) {
@@ -467,20 +490,33 @@ void registerUser(char * username, char * password) {
   fflush(users);
 }
 
+void sendFileAmount(int fd, struct sockaddr_storage client_addr) {
+  char buffer[INT_LEN];
+  sprintf(buffer,"%ld\n",fileListSize);
+  sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+}
+
 void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
   if (userIsLoggedIn(ipstr, portstr)) {
+    if (strcmp(cmd, "PLAIN") == 0) {
+        sendto(fd, "Already logged in\n", strlen("Already logged in\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    } else
     if (strcmp(cmd, "LIST") == 0) { // LIST files
                                   // LIST peers <hash>
       char * arg = strtok(NULL, "\n");
       if (strcmp(arg, "files") == 0) {
-        FileList* fl = fileList;
-        sendFiles(fd, fl, client_addr);
+        pthread_mutex_lock(&mutex);
+        sendFileAmount(fd, client_addr);
+        sendFiles(fd, fileList, client_addr);
+        pthread_mutex_unlock(&mutex);
       } else {
         arg = strtok(arg, " ");
         if (strcmp(arg, "peers") == 0) {
           arg = strtok(NULL, "\n");
           // now arg has the hash of the file
+          pthread_mutex_lock(&mutex);
           sendPeers(fileList, fd, arg, client_addr);
+          pthread_mutex_unlock(&mutex);
         }
       }
     } 
@@ -494,6 +530,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
       char * ip = strtok(NULL, ":");
       char * port = strtok(NULL, " ");
       char * hash = strtok(NULL, "\n");
+      if (ip == NULL || port == NULL || hash == NULL) return;
       if (checkIpNPort(hash, ip, port)) {
         sendto(fd, "User and file are available\n", strlen("User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
         addLeecher(hash, ipstr, portstr);
@@ -576,8 +613,10 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
   }
   
   if (strcmp(strtok(cmd,"\n"), "QUIT") == 0) {
+    pthread_mutex_lock(&mutex);
     removeFileSeeder(ipstr, portstr);
     removeLoggedUser(ipstr, portstr);
+    pthread_mutex_unlock(&mutex);
   }
 }
 

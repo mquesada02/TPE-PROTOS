@@ -13,6 +13,7 @@
 
 #define INPUT_SIZE 256
 #define MAX_PEERS 5
+#define MAX_INT_LEN 12
 
 enum STATUS {
     READ_READY,
@@ -181,10 +182,11 @@ size_t sendMessage(struct selector_key * key, char * msg, size_t size) {
     return sendto(LEECH(key)->socket, msg, size, 0, (struct sockaddr *)LEECH(key)->trackerAddr, sizeof(struct sockaddr_in));
 }
 
-size_t receiveMessage(struct selector_key * key, char * buff, size_t len) {
+ssize_t receiveMessage(struct selector_key * key, char * buff, size_t len) {
+    socklen_t plen = sizeof(struct sockaddr_in);
     return recvfrom(LEECH(key)->socket, buff, len, 0,
                     (struct sockaddr *)LEECH(key)->trackerAddr,
-                    (socklen_t *) sizeof(struct sockaddr_in));
+                    &plen);
 }
 
 void cleanUpPeers() {
@@ -210,15 +212,16 @@ void loginHandler(PARAMS) {
 
     snprintf(requestBuff, requestSize - 1, "%s %s:%s%c", LOGIN, argv[1], argv[2], SEND);
     
-    sendMessage(key, requestBuff, requestSize - 1);
+    sendMessage(key, requestBuff, strlen(requestBuff));
 
     size_t responseSize = 256;
-    char responseBuff[responseSize];
-
-    if(receiveMessage(key, responseBuff, responseSize - 1) == 0) {
+    char responseBuff[responseSize+1];
+    ssize_t bytes;
+    if((bytes = receiveMessage(key, responseBuff, responseSize)) == 0) {
         printf("Connection unavailable\n");
         return;
     }
+    responseBuff[bytes] = '\0';
 
     printf("%s", responseBuff);
 
@@ -234,17 +237,26 @@ void filesHandler(PARAMS) {
     char requestBuff[requestSize];
     snprintf(requestBuff, requestSize - 1, "%s%c", FILES, SEND);
 
-    sendMessage(key, requestBuff, requestSize - 1);
+    sendMessage(key, requestBuff, strlen(requestBuff));
 
     size_t responseSize = 256;
-    char responseBuff[responseSize];
-
-    if(receiveMessage(key, responseBuff, responseSize - 1) == 0) {
+    char responseBuff[responseSize+1];
+    char amount[MAX_INT_LEN] = {0};
+    ssize_t bytes = receiveMessage(key, amount, MAX_INT_LEN);
+    if (bytes <= 0) {
         printf("Connection unavailable\n");
         return;
     }
-
-    printf("%s", responseBuff);
+    int amountVal = atoi(amount)+1; // the +1 is for the "No more files found"
+    int lineCount = 0;
+    printf("Files amount: %d\n", amountVal-1);
+    while (lineCount < amountVal) {
+        bytes = receiveMessage(key, responseBuff, responseSize);
+        if (bytes <= 0) continue;
+        responseBuff[bytes] = '\0';
+        printf("%s",responseBuff);
+        lineCount++;
+    }
 }
 
 void downloadHandler(PARAMS) {
