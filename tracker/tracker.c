@@ -701,10 +701,10 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
 		sendto(fd, "No file with hash specified\n", strlen("No file with hash specified\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 		return;
 	  }
-	  int bufferSize = strlen(nameStr)+1;
-      char buffer[bufferSize+1];
-	  sprintf(buffer, "%s\n", nameStr);
-      sendto(fd, buffer, bufferSize, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+	  //int bufferSize = strlen(nameStr)+1;
+      //char buffer[bufferSize+1];
+	  //sprintf(buffer, "%s\n", nameStr);
+      sendto(fd, nameStr, strlen(nameStr), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 	}
   } else {
     if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
