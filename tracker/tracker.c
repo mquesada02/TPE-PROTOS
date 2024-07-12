@@ -161,10 +161,13 @@ void * deleteUncheckedSeeders() {
   FileList *list = fileList;
   while(!done) {
     while(list != NULL && list->file != NULL) {
+      pthread_mutex_lock(&filesMutex);
       list->file->seeders = _deleteUncheckedSeeders(list->file->seeders);
+      FileList * aux = list->next;
       if (list->file->seeders == NULL)
         removeFile(list->file->MD5);
-      list = fileList->next;
+      list = aux;
+      pthread_mutex_unlock(&filesMutex);
     } 
     sleep(QUANTUM);
     list = fileList;
@@ -845,7 +848,7 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
       sendMessage("No user\n", fd, client_addr);
 	  else 
       sendMessage(username, fd, client_addr);
-	} else {
+	} else if (!isCommand(cmd, "QUIT\n")) {
     sendMessage("Invalid command\n", fd, client_addr);
   }
 }
