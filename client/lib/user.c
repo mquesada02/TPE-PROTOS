@@ -102,8 +102,6 @@ struct Command commands[] = {
 
 int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buff);
 
-int requestUsername(struct selector_key *key, char * ip, char * port, char * buff);
-
 int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size);
 
 int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]);
@@ -413,11 +411,9 @@ void seedersHandler(PARAMS) {
 	if(activePeers == 0) printf("There are currently no seeder connections\n");
 	else {
 		printf("Current seeder connections (downloading file %s):\n", fileHash);
-		char username[MAX_USERNAME_SIZE];
 		for(int i = 0; i<activePeers; i++){
 			if(peers[i].status != DEAD){
-				if(requestUsername(key, peers[i].ip, peers[i].port, username)==0)
-					printf("- %s\n", username);
+				printf("- %s:%s\n", peers[i].ip, peers[i].port);
 			}
 		}
 	}
@@ -443,6 +439,7 @@ int requestFileName(struct selector_key *key, char hash[HASH_LEN + 1], char *buf
     return 0;
 }
 
+/*
 int requestUsername(struct selector_key *key, char * ip, char * port, char * buff) {
 	size_t requestSize = 256;
     char requestBuff[requestSize];
@@ -463,6 +460,7 @@ int requestUsername(struct selector_key *key, char * ip, char * port, char * buf
     strcpy(buff, responseBuff);
     return 0;
 }
+*/
 
 int requestFileSize(struct selector_key *key, char hash[HASH_LEN + 1], size_t *size) {
     size_t requestSize = 256;
