@@ -171,6 +171,7 @@ void* handleDownload() {
                                         peersFinished = 0;
                                         downloading = false;
                                         cleanup = false;
+                                        printf("Download finished\n");
                                         break;
                                     }
                                 }
@@ -345,22 +346,26 @@ void downloadHandler(PARAMS) {
 
     fileHash[HASH_LEN] = '\0';
     char name[MAX_FILE_LENGTH+1] = {0};
+
     size_t fileSize;
+
     if(requestFileName(key, fileHash, name) != 0) {
         printf("Failed to download file : Failed to retrieve file name info\n");
         return;
     }
+
     if(requestFileSize(key, fileHash, &fileSize) != 0) {
         printf("Failed to download file : Failed to retrieve file info\n");
         return;
     }
 
+    initFileBuffer(name, fileSize);
+
     if(createSeederConnections(key, fileHash) != 0) {
+        cancelDownload();
         printf("Failed to download file : No available seeders\n");
         return;
     }
-
-    initFileBuffer(name, fileSize);
 
     printf("Starting download\n");
 }
