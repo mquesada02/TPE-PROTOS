@@ -143,6 +143,7 @@ int main(int argc,char ** argv){
             .handle_close = NULL,
     };
 
+    tracker->leecherSocket = args.leecherSocksPort;
     ss = selector_register(selector, STDIN_FILENO, &input, OP_READ, tracker);
     if (ss != SELECTOR_SUCCESS) {
         err_msg = "Unable to register FD for IPv4/IPv6.";

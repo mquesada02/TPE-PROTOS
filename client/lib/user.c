@@ -40,12 +40,13 @@ struct Peer {
 };
 
 #define LOGIN "PLAIN"
+#define PORT "SETPORT"
 #define FILES "LIST files"
 #define SEEDERS "LIST peers"
 #define SIZE "SIZE"
 #define SEND '\n'
 
-#define LEECH(key) ( (struct Tracker *) (key)->data)
+#define ATTACHMENT(key) ( (struct Tracker *) (key)->data)
 
 #define PARAMS int argc, char *argv[], struct selector_key *key
 
@@ -235,13 +236,13 @@ void handleInput(struct selector_key *key) {
 }
 
 size_t sendMessage(struct selector_key * key, char * msg, size_t size) {
-    return sendto(LEECH(key)->socket, msg, size, 0, (struct sockaddr *)LEECH(key)->trackerAddr, sizeof(struct sockaddr_in));
+    return sendto(ATTACHMENT(key)->socket, msg, size, 0, (struct sockaddr *)ATTACHMENT(key)->trackerAddr, sizeof(struct sockaddr_in));
 }
 
 ssize_t receiveMessage(struct selector_key * key, char * buff, size_t len) {
     socklen_t plen = sizeof(struct sockaddr_in);
-    return recvfrom(LEECH(key)->socket, buff, len, 0,
-                    (struct sockaddr *)LEECH(key)->trackerAddr,
+    return recvfrom(ATTACHMENT(key)->socket, buff, len, 0,
+                    (struct sockaddr *)ATTACHMENT(key)->trackerAddr,
                     &plen);
 }
 
@@ -278,6 +279,10 @@ void loginHandler(PARAMS) {
         return;
     }
     responseBuff[bytes] = '\0';
+
+    snprintf(requestBuff, requestSize - 1, "%s %d%c", PORT, ATTACHMENT(key)->leecherSocket, SEND);
+
+    sendMessage(key, requestBuff, strlen(requestBuff));
 
     printf("%s", responseBuff);
 }
@@ -456,6 +461,8 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
         lineCount++;
     }
 
+    printf("Finished processing seeders\n");
+
     return seeders;
 }
 
@@ -491,6 +498,7 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
 
     while(activePeers < MAX_PEERS && availableSeeders > 0) {
         if(getSeeder(peers[activePeers].ip, peers[activePeers].port)) {
+            printf("Added seeder\n");
             struct peerMng *p = addPeer(key, peers[activePeers].ip, peers[activePeers].port);
             if (p != NULL) {
                 peers[activePeers].peer = p;

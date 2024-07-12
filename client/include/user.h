@@ -6,6 +6,8 @@
 struct Tracker {
     struct sockaddr_in * trackerAddr;
     int socket;
+
+    int leecherSocket;
 };
 
 void handleInput(struct selector_key *key);
