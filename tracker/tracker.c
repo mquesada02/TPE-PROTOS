@@ -78,7 +78,7 @@ void sendSeedersSize(size_t size, int fd, struct sockaddr_storage client_addr);
 void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage client_addr);
 void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr);
 bool hasSeeder(UserNode * node, char * username);
-bool checkIpNPort(char * hash, char * ip, char * port);
+bool checkIpNUser(char * hash, char * ip, char * user);
 void removeLoggedUser(char * ip, char * port);
 bool userFind(UserState * user, char * ip, char * port);
 void freeUsers();
@@ -104,6 +104,7 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
 void tracker_handler(struct selector_key * key);
 char * getUser(char* username, char* usersS);
 int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr, char ** savePtr);
+bool userNIpMatches(char * user, char * ip);
 
 // PRIVATE FUNCTIONS
 
@@ -114,13 +115,13 @@ FileList * _removeFile(FileList * file, char * MD5);
 UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * inserted);
 FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr);
 void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, char * port);
-bool _checkIpNPort(FileList * node, char * hash, char * ip, char * port);
+bool _checkIpNUser(FileList * node, char * hash, char * ip, char * user);
 UserState * _removeLoggedUser(UserState * node, char * ip, char * port);
 void _freeUsers(UserState * node);
 void _freeFileList(FileList * node);
 UserNode * _addLeecher(UserNode * node, char * username);
 void _setSeederPort(UserState * user, char * ipstr, char * portstr, char * newPort);
-
+bool _userNIpMatches(UserState * node, char * user, char * ip);
 
 // THREAD-ONLY FUNCTIONS
 
@@ -537,18 +538,29 @@ bool hasSeeder(UserNode * node, char * username) {
   return hasSeeder(node->next, username);
 }
 
-bool _checkIpNPort(FileList * node, char * hash, char * ip, char * port) {
+bool _userNIpMatches(UserState * node, char * user, char * ip) {
+  if (node == NULL) 
+    return false;
+  if (strcmp(node->username,user) == 0 && strcmp(node->ip,ip) == 0)
+    return true;
+  return _userNIpMatches(node->next, user, ip);
+}
+
+bool userNIpMatches(char * user, char * ip) {
+  return _userNIpMatches(state->first, user, ip);
+}
+
+bool _checkIpNUser(FileList * node, char * hash, char * ip, char * user) {
   if (node == NULL || node->file == NULL)
     return false;
   if (strcmp(node->file->MD5,hash) == 0) {
-    char * username = getUsernameFromIpNPort(ip, port);
-    return hasSeeder(node->file->seeders, username);
+    return hasSeeder(node->file->seeders, user);
   }
-  return _checkIpNPort(node->next, hash, ip, port);
+  return _checkIpNUser(node->next, hash, ip, user);
 }
 
-bool checkIpNPort(char * hash, char * ip, char * port) {
-  return _checkIpNPort(fileList, hash, ip, port);
+bool checkIpNUser(char * hash, char * ip, char * user) {
+  return _checkIpNUser(fileList, hash, ip, user) && userNIpMatches(user, ip);
 }
 
 
@@ -782,18 +794,18 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
     }
 	  registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
   } else if (isCommand(cmd, "CHECK")) {
-    char * ip = __strtok_r(NULL, ":", savePtr);
-    char * port = __strtok_r(NULL, " ", savePtr);
+    char * user = __strtok_r(NULL, " ", savePtr);
+    char * ip = __strtok_r(NULL, " ", savePtr);
     char * hash = __strtok_r(NULL, "\n", savePtr);
-    if (ip == NULL || port == NULL || hash == NULL) {
+    if (ip == NULL || user == NULL || hash == NULL) {
       _WRONG_PARAMETERS_;
       return;
     }
-    if (checkIpNPort(hash, ip, port)) {
-      sendto(fd, "User and file are available\n", strlen("User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    if (checkIpNUser(hash, ip, user)) {
+      sendMessage("User and file are available\n", fd, client_addr);
       addLeecher(hash, ipstr, portstr);
     } else
-      sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+      sendMessage("User and file are unavailable\n", fd, client_addr);
   } else if (isCommand(cmd, "CHANGEPASSWORD")) {
     char * oldPassword = __strtok_r(NULL, " ", savePtr);
     char * newPassword = __strtok_r(NULL, "\n", savePtr);
