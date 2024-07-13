@@ -919,7 +919,7 @@ void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  stru
 
     insertUser(node);
     if (loginState == LOGGEDIN) {
-      sendMessage("OK - Logged in sucesfully\n", fd, client_addr);
+      sendMessage("OK - Logged in succesfully\n", fd, client_addr);
     } else {
       sendMessage("OK - Registered successfully\n", fd, client_addr);
     }
