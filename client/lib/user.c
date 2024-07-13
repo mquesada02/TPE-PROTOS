@@ -49,6 +49,7 @@ typedef struct CurrentLeechers {
 } CurrentLeechers;
 
 #define LOGIN "PLAIN"
+#define LOGOUT "QUIT"
 #define PORT "SETPORT"
 #define FILES "LIST files"
 #define SEEDERS "LIST peers"
@@ -93,6 +94,8 @@ struct Command {
 void filesHandler(PARAMS);
 void downloadHandler(PARAMS);
 void loginHandler(PARAMS);
+void registerHandler(PARAMS);
+void logoutHandler(PARAMS);
 void pauseHandler(PARAMS);
 void resumeHandler(PARAMS);
 void cancelHandler(PARAMS);
@@ -102,6 +105,8 @@ void leechersHandler(PARAMS);
 
 struct Command commands[] = {
         {.cmd = "login", .handler = loginHandler},
+		{.cmd = "register", .handler = registerHandler},
+        {.cmd = "logout", .handler = logoutHandler},
         {.cmd = "files", .handler = filesHandler},
         {.cmd = "download", .handler = downloadHandler},
         {.cmd = "pause", .handler = pauseHandler},
@@ -299,8 +304,6 @@ void loginHandler(PARAMS) {
     size_t requestSize = 256;
     char requestBuff[requestSize];
 
-    //char hash[HASH_LEN + 1];
-
     snprintf(requestBuff, requestSize - 1, "%s %s:%s%c", LOGIN, argv[1], argv[2], SEND);
 
     ssize_t bytes;
@@ -319,6 +322,13 @@ void loginHandler(PARAMS) {
     responseBuff[bytes] = '\0';
 
     if(strncmp(responseBuff, "OK", strlen("OK")) != 0) {
+
+		if(strncmp(responseBuff, "Create user", strlen("Create user"))==0) {
+			snprintf(requestBuff, 3, "n%c", SEND);
+			sendMessage(key, requestBuff, strlen(requestBuff));
+			printf("No user with that username.\n");
+		}
+
         printf("%s", responseBuff);
         return;
     }
@@ -330,6 +340,72 @@ void loginHandler(PARAMS) {
     sendMessage(key, requestBuff, strlen(requestBuff));
 
     printf("%s", responseBuff);
+}
+
+void registerHandler(PARAMS) {
+    if (argc != 3) {
+        printf("Invalid parameter amount\n");
+        return;
+    }
+    size_t requestSize = 256;
+    char requestBuff[requestSize];
+
+    snprintf(requestBuff, requestSize - 1, "%s %s:%s%c", LOGIN, argv[1], argv[2], SEND);
+
+    ssize_t bytes;
+
+    if((bytes = sendMessage(key, requestBuff, strlen(requestBuff))) <= 0) {
+        printf("Connection unavailable\n");
+        return;
+    }
+
+    size_t responseSize = 256;
+    char responseBuff[responseSize+1];
+    if((bytes = receiveMessage(key, responseBuff, responseSize)) <= 0) {
+        printf("Connection unavailable\n");
+        return;
+    }
+    responseBuff[bytes] = '\0';
+
+	if(strncmp(responseBuff, "Create user ", strlen("Create user"))==0) {
+		snprintf(requestBuff, 3, "y%c", SEND);
+		sendMessage(key, requestBuff, strlen(requestBuff));
+		printf("User created successfully\n");
+        receiveMessage(key, responseBuff, responseSize);
+        return;
+	}
+
+    if(strncmp(responseBuff, "OK", strlen("OK")) == 0) {
+        snprintf(requestBuff, strlen("QUIT\n")+1, "QUIT%c", SEND);
+        sendMessage(key, requestBuff, strlen(requestBuff));
+    }
+
+    if(strncmp(responseBuff, "Already logged in", strlen("Already logged in"))==0) {
+        printf("%s", responseBuff);
+        return;
+    }
+
+    printf("Username already taken. User not registered\n");
+    return;
+}
+
+void logoutHandler(PARAMS) {
+    if (argc != 1) {
+        printf("Invalid parameter amount\n");
+        return;
+    }
+
+    size_t requestSize = 8;
+    char requestBuff[requestSize];
+
+    snprintf(requestBuff, strlen(LOGOUT)+2, "%s%c", LOGOUT, SEND);
+
+    if(sendMessage(key, requestBuff, strlen(requestBuff)) <= 0) {
+        printf("Connection unavailable\n");
+        return;
+    }
+    printf("Logged out\n");
+
 }
 
 void filesHandler(PARAMS) {

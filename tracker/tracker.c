@@ -965,7 +965,7 @@ void tracker_handler(struct selector_key * key) {
 char * getUser(char* username, char* usersS) {
   int len = strlen(username);
   char usernameComma[len+3];
-  memset(usernameComma, '\0', len);
+  memset(usernameComma, '\0', len+3);
   usernameComma[0] = '\n';
   strcat(usernameComma, username);
   usernameComma[len+1] = ',';
@@ -986,12 +986,12 @@ int loginUser(char * username, char * password, int fd, struct sockaddr_storage 
   if (user == NULL) {
 	  int len = strlen("Create user ")+MAX_USERNAME_SIZE+ strlen("? (y/n): ")+1;
 	  char msg[len];
-    sprintf(msg, "Create user %s? (y/n): ", username);
+      sprintf(msg, "Create user %s? (y/n): ", username);
 	  sendto(fd, msg, strlen(msg), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-    if(lineConfirms(fd, client_addr)){
-      registerUser(username, password);
-		  return REGISTERED;
-    }
+      if(lineConfirms(fd, client_addr)){
+        registerUser(username, password);
+	    return REGISTERED;
+      }
 	  sendto(fd, "New user not registered.\n", strlen("New user not registered.\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 	  return NOTREGISTERED;
   } else {

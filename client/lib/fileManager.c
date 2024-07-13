@@ -122,13 +122,13 @@ void endFileManager(){
 }
 
 char* getFilenamePath(){
-    int len = strlen("../downloads/") + strlen(filename);
+    int len = strlen("../repository/") + strlen(filename);
     char* aux = malloc(len+1); // Allocate memory for aux
     if (aux == NULL) {
         perror("Unable to allocate memory for aux");
         return NULL;
     }
-    strcpy(aux, "../downloads/");
+    strcpy(aux, "../repository/");
     strcat(aux, filename);
     aux[len] = '\0';
 
