@@ -264,6 +264,7 @@ int retrievedChunk(size_t chunkNum, char* chunk) {
             return -1;
         }
         stateMap[stateMapIndex].state = MISSING;
+        return 0;
     }
 
     memcpy(buffer+(chunkNum % SECTIONSIZE), chunk, CHUNKSIZE);

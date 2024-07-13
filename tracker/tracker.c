@@ -802,10 +802,10 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
       return;
     }
     if (checkIpNUser(hash, ip, user)) {
-      sendMessage("User and file are available\n", fd, client_addr);
+      sendMessage("OK - User and file are available\n", fd, client_addr);
       addLeecher(hash, ipstr, portstr);
     } else
-      sendMessage("User and file are unavailable\n", fd, client_addr);
+      sendMessage("ERR - User and file are unavailable\n", fd, client_addr);
   } else if (isCommand(cmd, "CHANGEPASSWORD")) {
     char * oldPassword = __strtok_r(NULL, " ", savePtr);
     char * newPassword = __strtok_r(NULL, "\n", savePtr);
