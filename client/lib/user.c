@@ -287,8 +287,10 @@ ssize_t receiveMessage(struct selector_key * key, char * buff, size_t len) {
 void cleanUpPeers() {
     for (int j = 0; j < activePeers; j++) {
         if (peers[j].status != DEAD) {
+            pthread_mutex_lock(&peers[j].peer->mutex);
             peers[j].peer->killFlag = true;
             peers[j].peer->killFlagAck = true;
+            pthread_mutex_unlock(&peers[j].peer->mutex);
             peers[j].peer = NULL;
             peers[j].status = DEAD;
             peersFinished++;
@@ -626,6 +628,8 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
         if (token != NULL) {
             strncpy(seeder->ip, token, IP_LEN);
             seeder->ip[IP_LEN] = '\0';
+        } else {
+            return 0;
         }
 
         printf("IP: %s\n", seeder->ip);
@@ -634,6 +638,8 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
         if (token != NULL) {
             strncpy(seeder->port, token, PORT_LEN);
             seeder->port[PORT_LEN] = '\0';
+        } else {
+            return 0;
         }
         printf("PORT: %s\n", seeder->port);
         seeder->next = seedersList;

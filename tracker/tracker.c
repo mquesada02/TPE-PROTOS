@@ -21,10 +21,12 @@
 
 enum { FAILED, LOGGEDIN, REGISTERED, NOTREGISTERED };
 
-typedef struct UserNode{
-    char username[MAX_USERNAME_SIZE];
-    struct UserNode* next;
-    bool checked;
+typedef struct UserNode {
+  char username[MAX_USERNAME_SIZE];
+  char ip[IP_LEN];
+  char port[PORT_LEN];
+  struct UserNode* next;
+  bool checked;
 } UserNode;
 
 typedef struct UserState {
@@ -42,12 +44,12 @@ struct TrackerState {
 pthread_mutex_t usersMutex;
 pthread_mutex_t filesMutex;
 typedef struct File{
-    char name[MAX_FILENAME];
-    size_t size; //bytes
-    char MD5[MD5_SIZE];
-    UserNode * seeders;
-    size_t seedersSize;
-    UserNode * leechers;
+  char name[MAX_FILENAME];
+  size_t size; //bytes
+  char MD5[MD5_SIZE];
+  UserNode * seeders;
+  size_t seedersSize;
+  UserNode * leechers;
 } File;
 
 typedef struct FileList{
@@ -86,7 +88,7 @@ bool userFind(UserState * user, char * ip, char * port);
 void freeUsers();
 void freeUserNode(UserNode * node);
 void freeFileList();
-void findNAddLeecher(FileList * node, char * hash, char * username);
+void findNAddLeecher(FileList * node, char * hash, char * username, char * ip, char * port);
 void addLeecher(char * hash, char * ip, char * port);
 bool userIsLoggedIn(char * ip, char * port);
 void registerUser(char * username, char * password);
@@ -107,6 +109,7 @@ void tracker_handler(struct selector_key * key);
 char * getUser(char* username, char* usersS);
 int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr, char ** savePtr);
 bool userNIpMatches(char * user, char * ip);
+char * getSeederPort(char * ip, char * port);
 
 // PRIVATE FUNCTIONS
 
@@ -114,16 +117,17 @@ UserState * _insertUser(UserState * node, UserState value);
 char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port);
 FileList * _removeFileSeeder(FileList * node, char * username);
 FileList * _removeFile(FileList * file, char * MD5);
-UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * inserted);
+UserNode * _insertSeeder(File * file, UserNode * node, char * username, char * ip, char * port, bool * inserted);
 FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr);
 void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, char * port);
 bool _checkIpNUser(FileList * node, char * hash, char * ip, char * user);
 UserState * _removeLoggedUser(UserState * node, char * ip, char * port);
 void _freeUsers(UserState * node);
 void _freeFileList(FileList * node);
-UserNode * _addLeecher(UserNode * node, char * username);
+UserNode * _addLeecher(UserNode * node, char * username, char * ip, char * port);
 void _setSeederPort(UserState * user, char * ipstr, char * portstr, char * newPort);
 bool _userNIpMatches(UserState * node, char * user, char * ip);
+char * _getSeederPort(UserState * node, char * ip, char * port);
 
 // THREAD-ONLY FUNCTIONS
 
@@ -388,13 +392,15 @@ void removeFile(char * MD5) {
   fileList = _removeFile(fileList, MD5);
 }
 
-UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * inserted) {
+UserNode * _insertSeeder(File * file, UserNode * node, char * username, char * ip, char * port, bool * inserted) {
   int cmp;
   if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
     // reached the end of the list or passed. Insert new node
     UserNode * newNode = calloc(1,sizeof(UserNode));
     strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
     newNode->username[MAX_USERNAME_SIZE-1] = '\0';
+    strncpy(newNode->ip, ip, IP_LEN);
+    strncpy(newNode->port, port, PORT_LEN);
     newNode->next = node;
     newNode->checked = true;
     *inserted = true;
@@ -404,14 +410,14 @@ UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * i
     node->checked = true;
   }
   if (cmp < 0) {
-    node->next = _insertSeeder(file, node->next, username, inserted);
+    node->next = _insertSeeder(file, node->next, username, ip, port, inserted);
   }
   return node;
 }
 
 UserNode * insertSeeder(File * file, UserNode * first, char * ip, char * port, bool * inserted) {
   char * username = getUsernameFromIpNPort(ip, port);
-  return _insertSeeder(file, first, username, inserted);
+  return _insertSeeder(file, first, username, ip, port, inserted);
 }
 
 FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr) {
@@ -484,16 +490,28 @@ char * name(char * md5) {
 	return fl->file->name;
 }
 
+char * _getSeederPort(UserState * node, char * ip, char * port) {
+  if (node == NULL) return NULL;
+  if (strcmp(node->ip, ip) == 0 && strcmp(node->port, port) == 0) {
+    return node->seederPort;
+  }
+  return _getSeederPort(node->next, ip, port);
+}
+
+char * getSeederPort(char * ip, char * port) {
+  return _getSeederPort(state->first, ip, port);
+}
+
 void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr) {
   if (seeder == NULL) {
     return;
   }
-  char ip[IP_LEN] = {0};
-  char port[PORT_LEN] = {0};
-  getIpNPortFromUsername(seeder->username, ip, port);
   char buffer[MAX_STRING_LENGTH];
-  sprintf(buffer, "%s:%s\n",ip,port);
-  sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  char * seederPort = getSeederPort(seeder->ip, seeder->port);
+  if (seederPort != NULL) {
+    sprintf(buffer, "%s:%s\n",seeder->ip, seederPort);
+    sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  }
   sendSeeders(seeder->next, fd, client_addr);
 }
 
@@ -622,33 +640,35 @@ void freeFileList() {
   _freeFileList(fileList);
 }
 
-UserNode * _addLeecher(UserNode * node, char * username) {
+UserNode * _addLeecher(UserNode * node, char * username, char * ip, char * port) {
   int cmp;
   if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
     // reached the end of the list or passed. Insert new node
     UserNode * newNode = malloc(sizeof(UserNode));
     strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
     newNode->username[MAX_USERNAME_SIZE-1] = '\0';
+    strncpy(newNode->ip,ip,IP_LEN);
+    strncpy(newNode->port,port,PORT_LEN);
     newNode->next = node;
     return newNode;
   }
   if (cmp < 0) {
-    node->next = _addLeecher(node->next, username);
+    node->next = _addLeecher(node->next, username, ip, port);
   }
   return node;
 }
 
-void findNAddLeecher(FileList * node, char * hash, char * username) {
+void findNAddLeecher(FileList * node, char * hash, char * username, char * ip, char * port) {
   if (fileList == NULL || fileList->file == NULL) return;
   if (strcmp(fileList->file->MD5, hash) == 0) {
-    fileList->file->leechers = _addLeecher(fileList->file->leechers, username);
+    fileList->file->leechers = _addLeecher(fileList->file->leechers, username, ip, port);
   }
 }
 
 void addLeecher(char * hash, char * ip, char * port) {
   pthread_mutex_lock(&filesMutex);
   char * username = getUsernameFromIpNPort(ip, port);
-  findNAddLeecher(fileList, hash, username);
+  findNAddLeecher(fileList, hash, username, ip, port);
   pthread_mutex_unlock(&filesMutex);
 }
 
@@ -774,6 +794,10 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
       }
       if (isCommand(arg, "peers")) {
         arg = __strtok_r(NULL, "\n", savePtr);
+        if (arg == NULL) {
+          _WRONG_PARAMETERS_;
+          return;
+        }
         // now arg has the hash of the file
         handlePeers(arg, fd, client_addr);
       } else {

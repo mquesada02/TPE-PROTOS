@@ -36,8 +36,8 @@ static void user(char *s, struct user *user) {
 }
 
 static void version(void) {
-    fprintf(stderr, "smtpd version 0.0\n"
-                    "ITBA Protocolos de Comunicación 2024/1 -- Grupo 8\n"
+    fprintf(stderr, "cliente version 1.0\n"
+                    "ITBA Protocolos de Comunicación 2024/1 -- Grupo 3\n"
                     "AQUI VA LA LICENCIA\n");
 }
 
@@ -46,10 +46,10 @@ static void usage(const char *progname) {
         "Usage: %s [OPTION]...\n"
         "\n"
         "   -h               Imprime la ayuda y termina.\n"
-        "   -l <addr>        Dirección donde servirá el servidor.\n"
-        "   -P <con port>    Puerto entrante para conexiones.\n"
-        "   -u <name>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
-        "   -N <limit>       Limite de conexiones a aceptar \n"
+        "   -L <port>        Dirección del puerto pasivo para atender conexiones.\n"
+        "   -t <addr>        Dirección IP del tracker a conectarse.\n"
+        "   -T <port>        Dirección del puerto del tracker a conectarse.\n"
+        "   -N <limit>       Limite de conexiones entrantes (leechers) a aceptar \n"
         "   -v               Imprime información sobre la versión y termina.\n"
         "\n",
         progname);
