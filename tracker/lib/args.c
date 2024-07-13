@@ -67,7 +67,6 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
     args->disectors_enabled = true;
 
     int c;
-    int nusers = 0;
 
     while (true) {
         int option_index = 0;
