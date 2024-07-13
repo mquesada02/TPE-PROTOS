@@ -1,0 +1,28 @@
+.TH Tracker
+.SH NAME
+tracker \-    creates a running tracker entity
+.SH SYNOPSIS
+tracker
+tracker -L [PORT]
+
+.SH DESCRIPTION
+Keeps track of users and files through UDP, centralizing information about files, their seeders and leechers. User are able to register new accounts, log in, register new files to share and new ports that can be used to listen for other
+.I leechers.
+Users can log in with the command
+.I PLAIN
+.I<user>:<password>.
+If the user is not found, the tracker will respond with a registration promt, that the user is able to respond with a
+.I y/n.
+The tracker application will
+\fBkeep track \fR
+(thus the name) of all files located in the repository directory.
+
+
+.SH OPTIONS
+    -L [PORT] Establishes a connection through specified port instead of using the default
+
+.SH AUTHORS
+Timoteo Smart, Catalina Müller, Manuel Quesada, Nicolas Casella
+
+.SH SEE ALSO
+manClient

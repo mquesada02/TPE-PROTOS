@@ -1,0 +1,40 @@
+
+.TH Client
+.SH NAME
+downloads and shares files through peer to peer connections
+.SH SYNOPSIS
+client -L [PORT]
+
+client -N [LIMIT]
+
+client -h
+
+client -t [ADDR]
+
+
+.SH DESCRIPTION
+
+Can be used to create a connection among other
+.I client
+users through TCP, while also communicating to the tracker server using UDP. The client applicaction main responsibility is permiting users of downloading and sharing files located in the repository directory. If the user intends to be a
+.I seeder,
+the user should first be registered by the
+.IR tracker
+application.
+
+.SH "OPTIONS"
+
+    -L [PORT]  Establishes a connection through specified port instead of using the default.
+
+    -N [LIMIT] Establishes a limit of users that are can leech to the files.
+
+    -t [ADDR]  Attempts to connect to a tracker server though the [ADDR] specified.
+
+    -T [PORT] Specifies the tracker port to connect to.
+
+.SH AUTHORS
+Timoteo Smart, Catalina Müller, Manuel Quesada, Nicolas Casella
+
+.SH SEE ALSO
+
+Tracker
