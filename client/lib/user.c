@@ -72,6 +72,8 @@ struct SeedersList * seedersList = NULL;
 
 CurrentLeechers * leechers = NULL;
 
+struct selector_key clientKey;
+
 int activePeers = 0;
 int peersFinished = 0;
 
@@ -153,26 +155,26 @@ void freePeers() {
 }
 
 void* handleDownload() {
+    bool connectionLost = false;
     char buff[CHUNKSIZE];
     int val;
     while(true) {
         if (downloading && !paused) {
-            if (peersFinished == activePeers) {
-                printf("Failed to download file : No available seeders\n");
-                freePeers();
-                cancelDownload();
-                downloading = false;
-                paused = false;
+            if (connectionLost) {
+                printf("Lost connection with seeder. Retrying connection...\n");
+                cleanUpPeers();
                 //client_key can't be accessed unless handleInput is already working
-                /*printf("Connection with seeders lost, attempting to reconnect...\n");
-                if (createSeederConnections(key, fileHash) != 0) {
+                if (createSeederConnections(&clientKey, fileHash) != 0) {
                     printf("Failed to download file : No available seeders\n");
-                    freePeers();
+                    cleanUpPeers();
                     cancelDownload();
                     downloading = false;
                     paused = false;
+                } else{
+                    downloading = true;
+                    paused = false;
                 }
-                 */
+                connectionLost = false;
             } else {
                 for (int i = 0; i < activePeers; i++) {
                     size_t byte = 0;
@@ -228,7 +230,14 @@ void* handleDownload() {
                                 peers[i].status = DEAD;
                                 peersFinished++;
                                 pthread_mutex_unlock(&peers[i].peer->mutex);
+                                if(retrievedChunk(peers[i].currByte, NULL) == -1) {
+                                    cleanUpPeers();
+                                    cancelDownload();
+                                    downloading = false;
+                                    paused = false;
+                                }
                                 printf("Lost connection with peer %d\n", i);
+                                connectionLost = true;
                                 break;
                             }
                             if (peers[i].peer->readReady) {
@@ -248,6 +257,9 @@ void* handleDownload() {
 }
 
 void handleInput(struct selector_key *key) {
+    clientKey.data = key->data;
+    clientKey.fd = key->fd;
+    clientKey.s = key->s;
     ssize_t bytesRead = read(key->fd, inputBuffer, INPUT_SIZE - 1);
     if (bytesRead <= 0) {
         return;

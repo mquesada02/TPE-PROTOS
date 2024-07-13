@@ -156,6 +156,23 @@ int setupLeecherSocket(const char *service, const char **errmsg) {
         }
     }
 
+    struct timeval timeout;
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_usec = 0;
+
+    if (setsockopt(servSock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        close(servSock);
+        freeaddrinfo(servAddr);
+        return ERROR;
+    }
+
+
+    if (setsockopt(servSock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        close(servSock);
+        freeaddrinfo(servAddr);
+        return ERROR;
+    }
+
     freeaddrinfo(servAddr);
 
     return servSock;
@@ -272,7 +289,7 @@ void leecherRead(struct selector_key *key) {
         snprintf(LEECH(key)->port, 6, "%d", ntohs(addr.sin_port));
 
 
-        snprintf(LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, "%s %s:%s:%s:%s\n", "CHECK", user, LEECH(key)->ip, LEECH(key)->port, LEECH(key)->hash);
+        snprintf(LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, "%s %s %s %s\n", "CHECK", user, LEECH(key)->ip, LEECH(key)->hash);
 
         pthread_mutex_lock(&LEECH(key)->sendingMutex);
         if (sendto(LEECH(key)->trackerSocket, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0, (struct sockaddr *)LEECH(key)->trackerAddr, sizeof(struct sockaddr_in)) <= 0) {
@@ -289,9 +306,9 @@ void leecherRead(struct selector_key *key) {
         }
         pthread_mutex_unlock(&LEECH(key)->sendingMutex);
 
-        /*if (strncmp(LEECH(key)->requestBuffer, "OK", 2) != 0) {
+        if (strncmp(LEECH(key)->requestBuffer, "OK", 2) != 0) {
             goto auth_fail;
-        }*/
+        }
 
 
         LEECH(key)->registered = true;
@@ -397,6 +414,23 @@ struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char
         free(tracker);
         close(sock);
         *errmsg = "Memory allocation failed";
+        return NULL;
+    }
+
+    struct timeval timeout;
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_usec = 0;
+
+    if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        free(tracker);
+        close(sock);
+        return NULL;
+    }
+
+
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        free(tracker);
+        close(sock);
         return NULL;
     }
 
@@ -520,6 +554,7 @@ void peerRead(struct selector_key *key) {
         if(PEER(key)->killFlagAck) {
             selector_unregister_fd(key->s, key->fd);
             close(key->fd);
+            pthread_mutex_destroy(&PEER(key)->mutex);
             free(PEER(key));
             return;
         }
@@ -565,6 +600,7 @@ void peerWrite(struct selector_key *key) {
         if(PEER(key)->killFlagAck) {
             selector_unregister_fd(key->s, key->fd);
             close(key->fd);
+            pthread_mutex_destroy(&PEER(key)->mutex);
             free(PEER(key));
             return;
         }
