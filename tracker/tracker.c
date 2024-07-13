@@ -25,8 +25,6 @@ typedef struct UserNode{
     bool checked;
 } UserNode;
 
-
-
 typedef struct UserState {
   char username[MAX_USERNAME_SIZE];
   char ip[IP_LEN];
@@ -96,16 +94,16 @@ void getSize(char * hash, int fd, struct sockaddr_storage client_addr);
 void setSeederPort(char * ipstr, char * portstr, char * newPort);
 void handleFiles(int fd, struct sockaddr_storage client_addr);
 void handlePeers(char * hash, int fd, struct sockaddr_storage client_addr);
-void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char * newPassword, int fd, struct sockaddr_storage client_addr);
-void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr);
-void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr);
+void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char * newPassword, int fd, struct sockaddr_storage client_addr, char ** savePtr);
+void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr, char ** savePtr);
+void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr, char ** savePtr);
 bool isCommand(char * cmd, const char * cmdTest);
-void handleNotLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr);
+void handleNotLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr, char ** savePtr);
 void handleQUIT(char * ipstr, char * portstr);
-void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr);
+void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr, char ** savePtr);
 void tracker_handler(struct selector_key * key);
 char * getUser(char* username, char* usersS);
-int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr);
+int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr, char ** savePtr);
 
 // PRIVATE FUNCTIONS
 
@@ -128,6 +126,9 @@ void _setSeederPort(UserState * user, char * ipstr, char * portstr, char * newPo
 
 UserNode * _deleteUncheckedSeeders(UserNode* node);
 void * deleteUncheckedSeeders();
+
+
+
 
 static void sigterm_handler(const int signal) {
     printf("Signal %d, cleaning up and exiting\n",signal);
@@ -705,7 +706,7 @@ void handlePeers(char * hash, int fd, struct sockaddr_storage client_addr) {
   pthread_mutex_unlock(&filesMutex);
 }
 
-void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char * newPassword, int fd, struct sockaddr_storage client_addr) {
+void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char * newPassword, int fd, struct sockaddr_storage client_addr, char ** savePtr) {
   fseek(users, 0L, SEEK_END);
   int usersStrLen = ftell(users);
   rewind(users);
@@ -717,8 +718,8 @@ void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char
   usersCpy[usersStrLen] = '\0';
   char * username = getUsernameFromIpNPort(ipstr, portstr);
   char * user = getUser(username, usersStr);
-  strtok(user, ",");
-  char * passwordStr = strtok(NULL, "\n");
+  __strtok_r(user, ",", savePtr);
+  char * passwordStr = __strtok_r(NULL, "\n", savePtr);
   if(strcmp(passwordStr, oldPassword) != 0){
     sendto(fd, "Incorrect password\n", strlen("Incorrect password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
   } else {
@@ -726,13 +727,13 @@ void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char
     char * bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile;
     char bufferToStoreUsernameAndPasswordFromUser[MAX_STRING_LENGTH];
     sprintf(bufferToStoreUsernameAndPasswordFromUser, "%s,%s", username, oldPassword);
-    bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(usersCpy, "\n");
+    bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = __strtok_r(usersCpy, "\n", savePtr);
     while (bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile != NULL) {
         if (strcmp(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, bufferToStoreUsernameAndPasswordFromUser) != 0) {
             fputs(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, newCSV);
             fputc('\n', newCSV);
         }
-        bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(NULL, "\n");
+        bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = __strtok_r(NULL, "\n", savePtr);
     }
     fflush(newCSV);
     remove("auth/users.csv");
@@ -745,11 +746,11 @@ void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char
   }
 }
 
-void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr) {
+void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr, char ** savePtr) {
   if (isCommand(cmd, "PLAIN")) {
     sendMessage("Already logged in\n", fd, client_addr);
   } else if (isCommand(cmd, "LIST")) {
-    char * arg = strtok(NULL, "\n");
+    char * arg = __strtok_r(NULL, "\n", savePtr);
     if (arg == NULL) {
       _WRONG_PARAMETERS_;
       return;
@@ -757,13 +758,13 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
     if (isCommand(arg, "files")) {
       handleFiles(fd, client_addr);
     } else {
-      arg = strtok(arg, " ");
+      arg = __strtok_r(arg, " ", savePtr);
       if (arg == NULL) {
         _WRONG_PARAMETERS_;
         return;
       }
       if (isCommand(arg, "peers")) {
-        arg = strtok(NULL, "\n");
+        arg = __strtok_r(NULL, "\n", savePtr);
         // now arg has the hash of the file
         handlePeers(arg, fd, client_addr);
       } else {
@@ -772,18 +773,18 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
       }
     }
   } else if (isCommand(cmd, "REGISTER")) {
-    char * name = strtok(NULL, " ");
-    char * bytes = strtok(NULL, " ");
-    char * hash = strtok(NULL, "\n");
+    char * name = __strtok_r(NULL, " ", savePtr);
+    char * bytes = __strtok_r(NULL, " ", savePtr);
+    char * hash = __strtok_r(NULL, "\n", savePtr);
     if (name == NULL || bytes == NULL || hash == NULL) {
       _WRONG_PARAMETERS_;
       return;
     }
 	  registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
   } else if (isCommand(cmd, "CHECK")) {
-    char * ip = strtok(NULL, ":");
-    char * port = strtok(NULL, " ");
-    char * hash = strtok(NULL, "\n");
+    char * ip = __strtok_r(NULL, ":", savePtr);
+    char * port = __strtok_r(NULL, " ", savePtr);
+    char * hash = __strtok_r(NULL, "\n", savePtr);
     if (ip == NULL || port == NULL || hash == NULL) {
       _WRONG_PARAMETERS_;
       return;
@@ -794,8 +795,8 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
     } else
       sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
   } else if (isCommand(cmd, "CHANGEPASSWORD")) {
-    char * oldPassword = strtok(NULL, " ");
-    char * newPassword = strtok(NULL, "\n");
+    char * oldPassword = __strtok_r(NULL, " ", savePtr);
+    char * newPassword = __strtok_r(NULL, "\n", savePtr);
 
     if (oldPassword == NULL || newPassword == NULL) {
       _WRONG_PARAMETERS_;
@@ -805,24 +806,24 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
     if(strcmp(oldPassword, newPassword) == 0){
       sendto(fd, "New password cannot be the same as old password\n", strlen("New password cannot be the same as old password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     } else {
-      handleChangePassword(ipstr, portstr, oldPassword, newPassword, fd, client_addr);
+      handleChangePassword(ipstr, portstr, oldPassword, newPassword, fd, client_addr, savePtr);
     }
   } else if (isCommand(cmd, "SIZE")) {
-    char * hash = strtok(NULL, "\n");
+    char * hash = __strtok_r(NULL, "\n", savePtr);
     if (hash == NULL) {
       _WRONG_PARAMETERS_;
       return;
     }
     getSize(hash, fd, client_addr);
   } else if (isCommand(cmd, "SETPORT")) {
-    char * newPort = strtok(NULL, "\n");
+    char * newPort = __strtok_r(NULL, "\n", savePtr);
     if (newPort == NULL) {
       _WRONG_PARAMETERS_;
       return;
     }
     setSeederPort(ipstr, portstr, newPort);
   } else if (isCommand(cmd, "NAME")) {
-    char * hash = strtok(NULL, "\n");
+    char * hash = __strtok_r(NULL, "\n", savePtr);
     if (hash == NULL) {
       _WRONG_PARAMETERS_;
       return;
@@ -837,8 +838,8 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
 	  sprintf(buffer, "%s\n", nameStr);
     sendto(fd, buffer, bufferSize, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 	} else if (isCommand(cmd, "USERNAME")) {
-	  char * ip = strtok(NULL, " ");
-	  char * port = strtok(NULL, "\n");
+	  char * ip = __strtok_r(NULL, " ", savePtr);
+	  char * port = __strtok_r(NULL, "\n", savePtr);
     if (ip == NULL || port == NULL) {
       _WRONG_PARAMETERS_;
       return;
@@ -853,15 +854,15 @@ void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct
   }
 }
 
-void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr) {
-  char * user = strtok(NULL, ":");
-  char * password = strtok(NULL, "\n");
+void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr, char ** savePtr) {
+  char * user = __strtok_r(NULL, ":", savePtr);
+  char * password = __strtok_r(NULL, "\n", savePtr);
   if (user == NULL || password == NULL) {
     _WRONG_PARAMETERS_;
     return;
   }
     
-  int loginState = loginUser(user, password, fd, client_addr);
+  int loginState = loginUser(user, password, fd, client_addr, savePtr);
 
   if (loginState == LOGGEDIN || loginState == REGISTERED) {
     if (state == NULL) {
@@ -898,9 +899,9 @@ bool isCommand(char * cmd, const char * cmdTest) {
   return strcmp(cmd, cmdTest) == 0;
 }
 
-void handleNotLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr) {
+void handleNotLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr, char ** savePtr) {
   if (isCommand(cmd, "PLAIN")) { // PLAIN user:password
-    handlePLAINLoggedIn(cmd, ipstr, portstr, fd, client_addr);
+    handlePLAINLoggedIn(cmd, ipstr, portstr, fd, client_addr, savePtr);
   } else if (!isCommand(cmd, "REGISTER")) {
     sendMessage("Authentication failed\n", fd, client_addr);
   }
@@ -915,14 +916,14 @@ void handleQUIT(char * ipstr, char * portstr) {
   pthread_mutex_unlock(&filesMutex);
 }
 
-void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
+void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr, char ** savePtr) {
   if (userIsLoggedIn(ipstr, portstr)) {
-    handleLoggedInCmd(cmd, ipstr, portstr, fd, client_addr);
+    handleLoggedInCmd(cmd, ipstr, portstr, fd, client_addr, savePtr);
   } else {
-    handleNotLoggedInCmd(cmd, ipstr, portstr, fd, client_addr);
+    handleNotLoggedInCmd(cmd, ipstr, portstr, fd, client_addr, savePtr);
   }
 
-  if (strcmp(strtok(cmd,"\n"), "QUIT") == 0) {
+  if (strcmp(__strtok_r(cmd,"\n", savePtr), "QUIT") == 0) {
     handleQUIT(ipstr, portstr);
   }
 }
@@ -942,9 +943,10 @@ void tracker_handler(struct selector_key * key) {
     removeLoggedUser(ipstr, portstr);
     return;
   }
-  char * cmd = strtok(buffer, " ");
+  char * savePtr;
+  char * cmd = __strtok_r(buffer, " ", &savePtr);
   if (cmd != NULL)
-    handleCmd(cmd, ipstr, portstr, key->fd, client_addr);
+    handleCmd(cmd, ipstr, portstr, key->fd, client_addr, &savePtr);
 }
 
 char * getUser(char* username, char* usersS) {
@@ -958,7 +960,7 @@ char * getUser(char* username, char* usersS) {
   return strstr(usersS, usernameComma);
 }
 
-int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr) {
+int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr, char ** savePtr) {
   if (users == NULL) return false;
   fseek(users, 0L, SEEK_END);
   int usersStrLen = ftell(users);
@@ -980,8 +982,8 @@ int loginUser(char * username, char * password, int fd, struct sockaddr_storage 
 	  sendto(fd, "New user not registered.\n", strlen("New user not registered.\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 	  return NOTREGISTERED;
   } else {
-    strtok(user, ",");
-    char * passwordStr = strtok(NULL, "\n");
+    __strtok_r(user, ",", savePtr);
+    char * passwordStr = __strtok_r(NULL, "\n", savePtr);
     return strcmp(password, passwordStr) == 0;
   }
   return FAILED;
