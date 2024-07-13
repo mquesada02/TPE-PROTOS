@@ -22,36 +22,25 @@
 
 #define LEN_DEFINE_SIZE 32
 
+#define TIMEOUT 5
+#define LEECHER_TIMEOUT 15
+
 #define MAX_ADDR_BUFFER 128
 #define MAXPENDING 32
 
 static char addrBuffer[MAX_ADDR_BUFFER];
 int connections = 0;
 
-#define LEECH(key) ( (struct leecherMng *)(key)->data )
-#define PEER(key) ( (struct peerMng *)(key)->data )
-#define ARGS(key) ( (struct clientArgs *)(key)->data )
+#define LEECH(key) ( (struct LeecherMng *)(key)->data )
+#define PEER(key) ( (struct PeerMng *)(key)->data )
+#define LEECH_HANDLER(key) ( (struct LeecherHandlerMng *)(key)->data )
 
 void leecherRead(struct selector_key *key);
 void leecherWrite(struct selector_key *key);
 static void quit(struct selector_key *key);
 void peerRead(struct selector_key *key);
 void peerWrite(struct selector_key *key);
-void cleanupPeerMng(struct peerMng *peer);
-
-struct leecherMng {
-
-    bool registered;
-
-    char requestBuffer[REQUEST_BUFFER_SIZE];
-
-    char responseBuffer[CHUNKSIZE + 1];
-
-    char hash[33];
-    size_t byteFrom;
-    size_t size;
-
-};
+void cleanupPeerMng(struct PeerMng *peer);
 
 static const struct fd_handler leechersHandler = {
         .handle_read   = leecherRead,
@@ -125,6 +114,7 @@ int printSocketAddress(const struct sockaddr *address, char *addrBuffer) {
     return 1;
 }
 
+//Codigo obtenido de la cátedra de Protocolos de Comunicación 1C-2024
 int setupLeecherSocket(const char *service, const char **errmsg) {
     // Construct the server address structure
     struct addrinfo addrCriteria;                   // Criteria for address match
@@ -175,10 +165,10 @@ void leecherHandler(struct selector_key *key) {
 
     struct sockaddr_storage leecherAddr;
     socklen_t leecherAddrLen = sizeof(leecherAddr);
-    struct leecherMng * mng = NULL;
+    struct LeecherMng * mng = NULL;
 
     int leecher = -1;
-    if(connections < ARGS(key)->conectionLimit || ARGS(key)->conectionLimit == 0) {
+    if(connections < LEECH_HANDLER(key)->args->conectionLimit || LEECH_HANDLER(key)->args->conectionLimit == 0) {
         leecher = accept(key->fd, (struct sockaddr*) &leecherAddr, &leecherAddrLen);
     }
     if(leecher == -1) {
@@ -188,13 +178,16 @@ void leecherHandler(struct selector_key *key) {
         goto fail;
     }
 
-    mng = malloc(sizeof(struct leecherMng));
+    mng = malloc(sizeof(struct LeecherMng));
 
     if(mng == NULL) {
         goto fail;
     }
 
     mng->registered = false;
+    mng->trackerSocket = LEECH_HANDLER(key)->tracker->socket;
+    mng->trackerAddr = LEECH_HANDLER(key)->tracker->trackerAddr;
+    mng->sendingMutex = LEECH_HANDLER(key)->tracker->sendingMutex;
 
     memset(mng, 0, sizeof(*mng));
 
@@ -217,7 +210,7 @@ void leecherHandler(struct selector_key *key) {
 }
 
 static void quit(struct selector_key *key) {
-    //removeLeecher(ip, port, hash);
+    removeLeecher(LEECH(key)->ip, LEECH(key)->port, LEECH(key)->hash);
     connections--;
     close(key->fd);
     free(LEECH(key));
@@ -225,13 +218,6 @@ static void quit(struct selector_key *key) {
 
 
 void leecherRead(struct selector_key *key) {
-
-    if(!LEECH(key)->registered) {
-        //ssize_t bytes = recv(key->fd, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
-        //TODO consultar con el servidor si el usuario:IP es válido
-        //addLeecher(ip, port, hash);
-        LEECH(key)->registered = true;
-    }
 
     memset(LEECH(key)->requestBuffer, 0, REQUEST_BUFFER_SIZE);
 
@@ -245,12 +231,13 @@ void leecherRead(struct selector_key *key) {
     //HASH:BYTE_FROM:BYTE_TO
     char tempByteFrom[256];
     char tempByteTo[256];
+    char user[MAX_USER_LEN];
 
     // Split the received string
     char *token = strtok(LEECH(key)->requestBuffer, ":");
     if (token == NULL)
         goto error;
-    strcpy(LEECH(key)->hash, token);
+    strncpy(LEECH(key)->hash, token, 32);
 
     token = strtok(NULL, ":");
     if (token == NULL)
@@ -262,12 +249,52 @@ void leecherRead(struct selector_key *key) {
         goto error;
     strcpy(tempByteTo, token);
 
+    token = strtok(NULL, ":");
+    if (token == NULL)
+        goto error;
+    strcpy(user, token);
+
     if (strtok(NULL, ":") != NULL)
         goto error;
 
-    // Validate and convert byteFrom and byteTo
-    //if (!isValidNumber(tempByteFrom) || !isValidNumber(tempByteTo))
-    //    goto error;
+    if(!LEECH(key)->registered) {
+
+        struct sockaddr_in addr;
+        socklen_t addr_len = sizeof(addr);
+
+        if (getpeername(key->fd, (struct sockaddr*)&addr, &addr_len) == -1) {
+            printf("WTF\n");
+            goto auth_fail;
+        }
+
+        inet_ntop(AF_INET, &addr.sin_addr, LEECH(key)->ip, 16);
+
+        snprintf(LEECH(key)->port, 6, "%d", ntohs(addr.sin_port));
+
+
+        snprintf(LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, "%s %s:%s:%s:%s\n", "CHECK", user, LEECH(key)->ip, LEECH(key)->port, LEECH(key)->hash);
+        /*
+        pthread_mutex_lock(&LEECH(key)->sendingMutex);
+        if (sendto(LEECH(key)->trackerSocket, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0, (struct sockaddr *)LEECH(key)->trackerAddr, sizeof(struct sockaddr_in)) <= 0) {
+            pthread_mutex_unlock(&LEECH(key)->sendingMutex);
+            goto auth_fail;
+        }
+
+        socklen_t plen = sizeof(struct sockaddr_in);
+        if (recvfrom(LEECH(key)->trackerSocket, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0, (struct sockaddr *)LEECH(key)->trackerAddr, &plen) <= 0) {
+            pthread_mutex_unlock(&LEECH(key)->sendingMutex);
+            goto auth_fail;
+        }
+        pthread_mutex_unlock(&LEECH(key)->sendingMutex);
+
+        if (strncmp(LEECH(key)->requestBuffer, "OK", 2) != 0) {
+            goto auth_fail;
+        }
+         */
+
+        LEECH(key)->registered = true;
+        addLeecher(LEECH(key)->ip, LEECH(key)->port, LEECH(key)->hash);
+    }
 
     size_t byteFrom = atol(tempByteFrom);
     size_t byteTo = atol(tempByteTo);
@@ -288,6 +315,7 @@ void leecherRead(struct selector_key *key) {
 
     return;
 
+    auth_fail:
     error:
     // no need to inform the client that a leecher lost connection/sent a bad request
     selector_unregister_fd(key->s, key->fd);
@@ -376,10 +404,10 @@ struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char
     return tracker;
 }
 
-struct peerMng *initializePeerMng() {
-    struct peerMng *peer = malloc(sizeof(struct peerMng));
+struct PeerMng *initializePeerMng() {
+    struct PeerMng *peer = malloc(sizeof(struct PeerMng));
     if (peer == NULL) {
-        perror("Failed to allocate memory for peerMng");
+        perror("Failed to allocate memory for PeerMng");
         return NULL;
     }
 
@@ -398,7 +426,7 @@ struct peerMng *initializePeerMng() {
     return peer;
 }
 
-void cleanupPeerMng(struct peerMng *peer) {
+void cleanupPeerMng(struct PeerMng *peer) {
     if (peer != NULL) {
         pthread_mutex_destroy(&peer->mutex);
         free(peer);
@@ -430,13 +458,28 @@ int setupPeerSocket(const char *ip, const char *port) {
         return -1;
     }
 
+    struct timeval timeout;
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_usec = 0;
+
+    if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        close(sock);
+        return -1;
+    }
+
+
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        close(sock);
+        return -1;
+    }
+
     return sock;
 
 }
 
-struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
+struct PeerMng * addPeer(struct selector_key *key, char *user, char *hash, char *ip, char *port) {
     int socket;
-    struct peerMng * mng = NULL;
+    struct PeerMng * mng = NULL;
 
     socket = setupPeerSocket(ip, port);
 
@@ -449,6 +492,8 @@ struct peerMng * addPeer(struct selector_key *key, char *ip, char *port) {
 
     if(mng == NULL)
         goto fail;
+
+    strncpy(mng->user, user, MAX_USER_LEN);
 
     if(SELECTOR_SUCCESS != selector_register(key->s, socket, &peerHandler, OP_WRITE, mng)) {
         goto fail;
@@ -485,7 +530,7 @@ void peerRead(struct selector_key *key) {
     size_t aux = recv(key->fd, buff, LEN_DEFINE_SIZE, 0);
 
     if(aux <= 0) {
-        //perror("Failed to connect (recv) to seeder");
+        perror("Failed to connect (recv) to seeder");
         PEER(key)->killFlag = true;
         pthread_mutex_unlock(&PEER(key)->mutex);
         return;
@@ -500,7 +545,7 @@ void peerRead(struct selector_key *key) {
             totalBytesReceived += bytes;
         } else {
             PEER(key)->killFlag = true;
-            //perror("Failed to connect (recv) to seeder");
+            perror("Failed to connect (recv) to seeder2");
             break;
         }
     }
@@ -547,7 +592,7 @@ void peerWrite(struct selector_key *key) {
     selector_set_interest(key->s, key->fd, OP_READ);
 }
 
-int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t byteTo) {
+int requestFromPeer(struct PeerMng * peer, char *hash, size_t byteFrom, size_t byteTo) {
     if (byteTo <= byteFrom + 1) {
         return -1;
     }
@@ -556,14 +601,14 @@ int requestFromPeer(struct peerMng * peer, char *hash, size_t byteFrom, size_t b
         return -1;
     }
 
-    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%lu:%lu", hash, byteFrom, byteTo);
+    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%lu:%lu:%s", hash, byteFrom, byteTo, peer->user);
     memset(peer->responseBuffer, 0, sizeof(peer->responseBuffer));
 
     peer->writeReady = true;
     return 0;
 }
 
-int readFromPeer(struct peerMng * peer, char buff[CHUNKSIZE]) {
+int readFromPeer(struct PeerMng * peer, char buff[CHUNKSIZE]) {
     if(peer->readReady) {
         peer->readReady = false;
         memcpy(buff, peer->responseBuffer, CHUNKSIZE);

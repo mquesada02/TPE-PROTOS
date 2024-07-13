@@ -34,7 +34,7 @@ struct SeedersList {
 };
 
 struct Peer {
-    struct peerMng *peer;
+    struct PeerMng *peer;
     char ip[IP_LEN + 1];
     char port[PORT_LEN + 1];
     int status;
@@ -70,8 +70,6 @@ struct Peer peers[MAX_PEERS];
 
 struct SeedersList * seedersList = NULL;
 
-struct selector_key * client_key = NULL;
-
 CurrentLeechers * leechers = NULL;
 
 int activePeers = 0;
@@ -81,6 +79,9 @@ bool downloading = false;
 bool paused = false;
 
 char fileHash[HASH_LEN + 1];
+
+
+char user[MAX_USERNAME_SIZE];
 
 struct Command {
     char *cmd;
@@ -147,7 +148,7 @@ void parseCommand(char *input, struct selector_key *key) {
 
 void freePeers() {
     for(int i=0; i<activePeers; i++) {
-        free(peers[i].peer);
+        //
     }
 }
 
@@ -155,26 +156,32 @@ void* handleDownload() {
     char buff[CHUNKSIZE];
     int val;
     while(true) {
-        if(downloading && !paused) {
+        if (downloading && !paused) {
             if (peersFinished == activePeers) {
+                printf("Failed to download file : No available seeders\n");
+                freePeers();
+                cancelDownload();
+                downloading = false;
+                paused = false;
                 //client_key can't be accessed unless handleInput is already working
-                printf("Connection with seeders lost, attempting to reconnect...\n");
-                if (createSeederConnections(client_key, fileHash) != 0) {
+                /*printf("Connection with seeders lost, attempting to reconnect...\n");
+                if (createSeederConnections(key, fileHash) != 0) {
                     printf("Failed to download file : No available seeders\n");
                     freePeers();
                     cancelDownload();
                     downloading = false;
                     paused = false;
                 }
+                 */
             } else {
                 for (int i = 0; i < activePeers; i++) {
                     size_t byte = 0;
-                    switch(peers[i].status) {
+                    switch (peers[i].status) {
 
                         case READ_READY:
                             pthread_mutex_lock(&peers[i].peer->mutex);
                             memset(buff, 0, CHUNKSIZE);
-                            if(readFromPeer(peers[i].peer, buff) != -1) {
+                            if (readFromPeer(peers[i].peer, buff) != -1) {
                                 retrievedChunk(peers[i].currByte, buff);
                                 peers[i].status = WAITING;
                             }
@@ -241,7 +248,6 @@ void* handleDownload() {
 }
 
 void handleInput(struct selector_key *key) {
-    client_key = key; //accessed by handleDownload
     ssize_t bytesRead = read(key->fd, inputBuffer, INPUT_SIZE - 1);
     if (bytesRead <= 0) {
         return;
@@ -284,17 +290,28 @@ void loginHandler(PARAMS) {
     //char hash[HASH_LEN + 1];
 
     snprintf(requestBuff, requestSize - 1, "%s %s:%s%c", LOGIN, argv[1], argv[2], SEND);
-    
-    sendMessage(key, requestBuff, strlen(requestBuff));
+
+    ssize_t bytes;
+
+    if((bytes = sendMessage(key, requestBuff, strlen(requestBuff))) <= 0) {
+        printf("Connection unavailable\n");
+        return;
+    }
 
     size_t responseSize = 256;
     char responseBuff[responseSize+1];
-    ssize_t bytes;
     if((bytes = receiveMessage(key, responseBuff, responseSize)) <= 0) {
         printf("Connection unavailable\n");
         return;
     }
     responseBuff[bytes] = '\0';
+
+    if(strncmp(responseBuff, "OK", strlen("OK")) != 0) {
+        printf("%s", responseBuff);
+        return;
+    }
+
+    strncpy(user, argv[1], MAX_USERNAME_SIZE - 1);
 
     snprintf(requestBuff, requestSize - 1, "%s %d%c", PORT, ATTACHMENT(key)->leecherSocket, SEND);
 
@@ -325,6 +342,10 @@ void filesHandler(PARAMS) {
     }
     int amountVal = atoi(amount)+1; // the +1 is for the "No more files found"
     int lineCount = 0;
+
+    if(amountVal == 1) {
+        return;
+    }
     printf("Files amount: %d\n", amountVal-1);
     while (lineCount < amountVal) {
         bytes = receiveMessage(key, responseBuff, responseSize);
@@ -533,7 +554,7 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
         lineCount++;
     }
 
-    printf("Finished processing seeders\n");
+    printf("%d seeders available\n", seeders);
 
     return seeders;
 }
@@ -570,16 +591,18 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
 
     while(activePeers < MAX_PEERS && availableSeeders > 0) {
         if(getSeeder(peers[activePeers].ip, peers[activePeers].port)) {
-            struct peerMng *p = addPeer(key, peers[activePeers].ip, peers[activePeers].port);
+            struct PeerMng *p = addPeer(key, user, hash, peers[activePeers].ip, peers[activePeers].port);
             if (p != NULL) {
                 peers[activePeers].peer = p;
                 peers[activePeers].status = WAITING;
                 activePeers++;
-                availableSeeders--;
                 printf("Added seeder\n");
             }
+            availableSeeders--;
         }
     }
+
+    printf("Established connection with %d seeders\n", activePeers);
 
     if(activePeers > 0) {
         downloading = true;
@@ -598,8 +621,11 @@ void addLeecher(char * ip, char * port, char * hash) {
 	if(leechers == NULL || atoi(leechers->ip) == atoi(ip)){
 		leechers = malloc(sizeof(CurrentLeechers));
 		strncpy(leechers->ip, ip, IP_LEN);
+        leechers->ip[IP_LEN] = '\0';
 		strncpy(leechers->port, port, PORT_LEN);
+        leechers->port[PORT_LEN] = '\0';
 		strncpy(leechers->fileHash, hash, HASH_LEN);
+        leechers->fileHash[HASH_LEN] = '\0';
 		if(leechers==NULL) leechers->next = NULL;
 		else leechers->next = node;
 
@@ -616,7 +642,7 @@ void addLeecher(char * ip, char * port, char * hash) {
 	node->next = newNode;
 }
 
-bool removeLecher(char * ip, char * port, char * hash) {
+bool removeLeecher(char * ip, char * port, char * hash) {
 	if(leechers==NULL) return false;
 
 	CurrentLeechers * node = leechers;

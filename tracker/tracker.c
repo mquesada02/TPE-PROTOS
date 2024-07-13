@@ -650,15 +650,18 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
 	    registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
     } else
     if (strcmp(cmd, "CHECK") == 0) {
+      char * user = strtok(NULL, ":");
       char * ip = strtok(NULL, ":");
       char * port = strtok(NULL, " ");
       char * hash = strtok(NULL, "\n");
+
+      printf("%s:%s:%s:%s", user, ip, port, hash);
       if (ip == NULL || port == NULL || hash == NULL) return;
       if (checkIpNPort(hash, ip, port)) {
-        sendto(fd, "User and file are available\n", strlen("User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+        sendto(fd, "OK - User and file are available\n", strlen("OK - User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
         addLeecher(hash, ipstr, portstr);
       } else
-        sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+        sendto(fd, "ERR - User or file is unavailable\n", strlen("ERR - User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
     } else
     if (strcmp(cmd, "CHANGEPASSWORD") == 0){ //CHANGEPASSWORD oldPassword newPassword
       char * oldPassword = strtok(NULL, " ");
@@ -753,11 +756,11 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
         node.port[PORT_LEN-1] = '\0';
         insertUser(node);
         if (loginState == 1)
-          sendto(fd, "Logged in successfully\n", strlen("Logged in successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+          sendto(fd, "OK - Logged in successfully\n", strlen("OK - Logged in successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
         else
-          sendto(fd, "Registered successfully\n", strlen("Registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+          sendto(fd, "OK - Registered successfully\n", strlen("OK - Registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
       } else if (loginState !=3){
-          sendto(fd, "Incorrect password for user\n", strlen("Incorrect password for user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+          sendto(fd, "ERR - Incorrect password for user\n", strlen("ERR - Incorrect password for user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
       }
     } else if (strcmp(cmd, "REGISTER") != 0){
       sendto(fd, "Authentication failed\n", strlen("Authentication failed\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));

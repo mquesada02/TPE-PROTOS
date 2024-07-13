@@ -123,8 +123,8 @@ int main(int argc,char ** argv){
 
     char peerPortStr[6];
     sprintf(peerPortStr, "%d",args.leecherSocksPort);
-    int leekerSocket = setupLeecherSocket(peerPortStr, &err_msg);
-    if (leekerSocket < 0) goto no_mutex;
+    int leecherSocket = setupLeecherSocket(peerPortStr, &err_msg);
+    if (leecherSocket < 0) goto no_mutex;
 
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT, sigterm_handler);
@@ -157,13 +157,20 @@ int main(int argc,char ** argv){
     tracker = setupTrackerSocket(args.trackerSocksAddr, trackerPortStr, &err_msg);
     if(tracker == NULL) goto finally;
 
+    tracker->sendingMutex = sendingMutex;
+
+    struct LeecherHandlerMng leecherHandlerMng;
+    leecherHandlerMng.args = &args;
+    leecherHandlerMng.tracker = tracker;
+
+
     const struct fd_handler input = {
             .handle_read = handleInput,
             .handle_write = NULL,
             .handle_close = NULL,
     };
 
-    const struct fd_handler leeker = {
+    const struct fd_handler leecher = {
             .handle_read = leecherHandler,
             .handle_write = NULL,
             .handle_close = NULL,
@@ -176,16 +183,16 @@ int main(int argc,char ** argv){
         goto finally;
     }
 
-    ss = selector_register(selector, leekerSocket, &leeker, OP_READ, &args);
+    ss = selector_register(selector, leecherSocket, &leecher, OP_READ, &leecherHandlerMng);
     if (ss != SELECTOR_SUCCESS) {
         err_msg = "Unable to register FD for IPv4/IPv6.";
         goto finally;
     }
 
-    pthread_t tid;
+    pthread_t downloadTID;
 
-    pthread_create(&tid, NULL, handleDownload, NULL);
-    pthread_detach(tid);
+    pthread_create(&downloadTID, NULL, handleDownload, (void*) tracker);
+    pthread_detach(downloadTID);
 
     pthread_t updateTID;
 
@@ -230,8 +237,8 @@ int main(int argc,char ** argv){
         free(tracker->trackerAddr);
         free(tracker);
     }
-    if (leekerSocket >= 0)
-        close(leekerSocket);
+    if (leecherSocket >= 0)
+        close(leecherSocket);
 
     return 0;
 }
