@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <syslog.h>
 
 #include "../include/selector.h"
 #include "../include/user.h"
@@ -313,6 +314,7 @@ void leecherRead(struct selector_key *key) {
 
         LEECH(key)->registered = true;
         addLeecher(LEECH(key)->ip, LEECH(key)->port, LEECH(key)->hash);
+        syslog(LOG_INFO,"Initialized connection with user with Ip: %s",LEECH(key)->ip);
     }
 
     size_t byteFrom = atol(tempByteFrom);
@@ -331,6 +333,7 @@ void leecherRead(struct selector_key *key) {
     LEECH(key)->byteFrom = byteFrom;
 
     selector_set_interest(key->s, key->fd, OP_WRITE);
+    syslog(LOG_INFO,"Sending %lu bytes to user with Ip: %s Port: %s",size,LEECH(key)->ip,LEECH(key)->port);
 
     return;
 
