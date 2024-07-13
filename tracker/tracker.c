@@ -16,6 +16,10 @@
 #define PORT_LEN 6
 
 #define _WRONG_PARAMETERS_ sendMessage("Invalid parameter amount\n", fd, client_addr)
+#define LOCALHOST "127.0.0.1"
+
+#define STUN_SERVER "stun.l.google.com"
+#define STUN_PORT "19302"
 
 enum { FAILED, LOGGEDIN, REGISTERED, NOTREGISTERED };
 
@@ -940,6 +944,76 @@ void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr
   }
 }
 
+int getPublicIp(char *public_ip, size_t ip_len) {
+  int sockfd;
+  struct addrinfo hints, *res;
+  struct sockaddr_storage clientaddr;
+  socklen_t addr_len = sizeof(clientaddr);
+
+  // Prepare hints
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;       // IPv4
+  hints.ai_socktype = SOCK_DGRAM;  // UDP
+
+  // Resolve the server address
+  int err = getaddrinfo(STUN_SERVER, STUN_PORT, &hints, &res);
+  if (err != 0) {
+      fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
+      return -1;
+  }
+
+  // Create a UDP socket
+  if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
+      perror("Socket creation failed");
+      freeaddrinfo(res);
+      return -1;
+  }
+
+  struct timeval timeout;
+  timeout.tv_sec = 5;  
+  timeout.tv_usec = 0;
+  if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+      perror("Set socket option failed");
+      close(sockfd);
+      freeaddrinfo(res);
+      return -1;
+  }
+
+  const unsigned char stun_binding_request[] = {
+    0x00, 0x01,
+    0x00, 0x00, 
+    0x21, 0x12, 0xA4, 0x42, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+  };
+
+  if (sendto(sockfd, stun_binding_request, sizeof(stun_binding_request), 0, res->ai_addr, res->ai_addrlen) < 0) {
+      perror("Sendto failed");
+      close(sockfd);
+      freeaddrinfo(res);
+      return -1;
+  }
+
+  char buffer[1024];
+  if (recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&clientaddr, &addr_len) < 0) {
+      perror("Recvfrom failed");
+      close(sockfd);
+      return -1;
+  }
+
+  char ipstr[INET_ADDRSTRLEN], portstr[6];
+  if (getnameinfo((struct sockaddr *)&clientaddr, addr_len, ipstr, sizeof(ipstr), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV) != 0) {
+      perror("Getnameinfo failed");
+      close(sockfd);
+      return -1;
+  }
+
+  strncpy(public_ip, ipstr, ip_len);
+  close(sockfd);
+  freeaddrinfo(res);
+  return 0;
+}
+
+
 
 void tracker_handler(struct selector_key * key) {
   struct sockaddr_storage client_addr;
@@ -950,7 +1024,8 @@ void tracker_handler(struct selector_key * key) {
   char portstr[PORT_LEN] = {0};
   char ipstr[IP_LEN] = {0};
   getnameinfo((struct sockaddr*)&client_addr, sizeof(struct sockaddr_storage), ipstr, sizeof(ipstr), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
-  if (bytesRecv <= 0) {
+  if (strcmp(ipstr, LOCALHOST) == 0 && (getPublicIp(ipstr, IP_LEN) != 0 || bytesRecv <= 0)) {
+    printf("Failed to get public IP\n");
     removeFileSeeder(ipstr, portstr);
     removeLoggedUser(ipstr, portstr);
     return;
