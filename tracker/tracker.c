@@ -1,7 +1,6 @@
 #include "include/tracker.h"
 
 #include <pthread.h>
-#include <sys/stat.h>
 
 #define MAX_REQUESTS 20
 #define INITIAL_SELECTOR 1024
@@ -16,6 +15,9 @@
 #define IP_LEN 16
 #define PORT_LEN 6
 
+#define _WRONG_PARAMETERS_ sendMessage("Invalid parameter amount\n", fd, client_addr)
+
+enum { FAILED, LOGGEDIN, REGISTERED, NOTREGISTERED };
 
 typedef struct UserNode{
     char username[MAX_USERNAME_SIZE];
@@ -60,11 +62,80 @@ size_t fileListSize = 0;
 static bool done = false;
 FILE * users = NULL;
 
+// PUBLIC FUNCTIONS
+static void sigterm_handler(const int signal);
+ssize_t sendMessage(char * msg, int fd, struct sockaddr_storage client_addr);
+bool lineConfirms(int fd, struct sockaddr_storage client_addr);
+void insertUser(UserState value);
+char * getUsernameFromIpNPort(char * ip, char * port);
+UserNode * removeSeeder(UserNode * seeder, char * username);
+void removeFileSeeder(char * ip, char * port);
 void removeFile(char * MD5);
+UserNode * insertSeeder(File * file, UserNode * first, char * ip, char * port, bool * inserted);
+void registerFile(char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr);
+void getIpNPortFromUsername(char * username, char * ip, char * port);
+char * name(char * md5);
+void sendSeeders(UserNode * seeder, int fd, struct sockaddr_storage client_addr);
+void sendSeedersSize(size_t size, int fd, struct sockaddr_storage client_addr);
+void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage client_addr);
+void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr);
+bool hasSeeder(UserNode * node, char * username);
+bool checkIpNPort(char * hash, char * ip, char * port);
+void removeLoggedUser(char * ip, char * port);
+bool userFind(UserState * user, char * ip, char * port);
+void freeUsers();
+void freeUserNode(UserNode * node);
+void freeFileList();
+void findNAddLeecher(FileList * node, char * hash, char * username);
+void addLeecher(char * hash, char * ip, char * port);
+bool userIsLoggedIn(char * ip, char * port);
+void registerUser(char * username, char * password);
+void sendFileAmount(int fd, struct sockaddr_storage client_addr);
+void getNReturnSize(FileList * node, char * MD5, int fd, struct sockaddr_storage client_addr);
+void getSize(char * hash, int fd, struct sockaddr_storage client_addr);
+void setSeederPort(char * ipstr, char * portstr, char * newPort);
+void handleFiles(int fd, struct sockaddr_storage client_addr);
+void handlePeers(char * hash, int fd, struct sockaddr_storage client_addr);
+void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char * newPassword, int fd, struct sockaddr_storage client_addr);
+void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr);
+void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr);
+bool isCommand(char * cmd, const char * cmdTest);
+void handleNotLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr);
+void handleQUIT(char * ipstr, char * portstr);
+void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr);
+void tracker_handler(struct selector_key * key);
+char * getUser(char* username, char* usersS);
+int loginUser(char * username, char * password, int fd, struct sockaddr_storage client_addr);
+
+// PRIVATE FUNCTIONS
+
+UserState * _insertUser(UserState * node, UserState value);
+char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port);
+FileList * _removeFileSeeder(FileList * node, char * username);
+FileList * _removeFile(FileList * file, char * MD5);
+UserNode * _insertSeeder(File * file, UserNode * node, char * username, bool * inserted);
+FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr);
+void _getIpNPortFromUsername(UserState * userState, char * username, char * ip, char * port);
+bool _checkIpNPort(FileList * node, char * hash, char * ip, char * port);
+UserState * _removeLoggedUser(UserState * node, char * ip, char * port);
+void _freeUsers(UserState * node);
+void _freeFileList(FileList * node);
+UserNode * _addLeecher(UserNode * node, char * username);
+void _setSeederPort(UserState * user, char * ipstr, char * portstr, char * newPort);
+
+
+// THREAD-ONLY FUNCTIONS
+
+UserNode * _deleteUncheckedSeeders(UserNode* node);
+void * deleteUncheckedSeeders();
 
 static void sigterm_handler(const int signal) {
     printf("Signal %d, cleaning up and exiting\n",signal);
     done = true;
+}
+
+ssize_t sendMessage(char * msg, int fd, struct sockaddr_storage client_addr) {
+  return sendto(fd, msg, strlen(msg), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 }
 
 bool lineConfirms(int fd, struct sockaddr_storage client_addr){
@@ -90,18 +161,21 @@ void * deleteUncheckedSeeders() {
   FileList *list = fileList;
   while(!done) {
     while(list != NULL && list->file != NULL) {
+      pthread_mutex_lock(&filesMutex);
       list->file->seeders = _deleteUncheckedSeeders(list->file->seeders);
+      FileList * aux = list->next;
       if (list->file->seeders == NULL)
         removeFile(list->file->MD5);
-      list = fileList->next;
-    }
+      list = aux;
+      pthread_mutex_unlock(&filesMutex);
+    } 
     sleep(QUANTUM);
     list = fileList;
   }
   return NULL;
 }
 
-int main(int argc,char ** argv){
+int main(int argc,char ** argv) {
     unsigned int port = 15555;
 
     struct tracker_args args;
@@ -123,18 +197,17 @@ int main(int argc,char ** argv){
          goto no_mutex;
        }
     }
+
     users = fopen("auth/users.csv", "a+");
-    if(users==NULL){
+    if(users == NULL){
       err_msg="Error opening auth/users.csv file";
       goto no_mutex;
     }
-
     char c;
     if ((c = fgetc(users)) == EOF)
       fputc('\n',users);
     else
       ungetc(c, users);
-
 
     char portStr[6];
     sprintf(portStr, "%d",args.socks_port);
@@ -211,14 +284,14 @@ int main(int argc,char ** argv){
   } else if(err_msg) {
     perror(err_msg);
   }
-  if (selector != NULL){
+  if (selector != NULL) {
     selector_destroy(selector);
   }
   selector_close();
-  if (socket >= 0){
+  if (socket >= 0) {
     close(socket);
   }
-  if(users!=NULL){
+  if (users != NULL) {
     fclose(users);
   }
   freeUsers();
@@ -401,7 +474,7 @@ void getIpNPortFromUsername(char * username, char * ip, char * port) {
   _getIpNPortFromUsername(state->first, username, ip, port);
 }
 
-char * name(char * md5){
+char * name(char * md5) {
 	FileList * fl = fileList;
 	while(fl!=NULL && strcmp(fl->file->MD5, md5)!=0) fl=fl->next;
 	if(fl==NULL) return NULL;
@@ -430,7 +503,7 @@ void sendSeedersSize(size_t size, int fd, struct sockaddr_storage client_addr) {
 void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage client_addr) {
   int cmp;
   if (node == NULL || node->file == NULL || (cmp = strcmp(hash, node->file->MD5)) > 0) {
-    sendto(fd, "No peers for this file\n", strlen("No peers for this file\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    sendMessage("No peers for this file\n", fd, client_addr);
     return;
   }
   if (cmp == 0) {
@@ -443,7 +516,7 @@ void sendPeers(FileList * node, int fd, char * hash, struct sockaddr_storage cli
 
 void sendFiles(int fd, FileList* fileList, struct sockaddr_storage client_addr) {
   if(fileList == NULL) {
-    sendto(fd, "No more files found\n", strlen("No more files found\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    sendMessage("No more files found\n", fd, client_addr);
     return;
   }
 
@@ -617,163 +690,240 @@ void setSeederPort(char * ipstr, char * portstr, char * newPort) {
   _setSeederPort(state->first, ipstr, portstr, newPort);
 }
 
-void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
-  if (userIsLoggedIn(ipstr, portstr)) {
-    if (strcmp(cmd, "PLAIN") == 0) {
-        sendto(fd, "Already logged in\n", strlen("Already logged in\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-    } else
-    if (strcmp(cmd, "LIST") == 0) { // LIST files
-                                  // LIST peers <hash>
-      char * arg = strtok(NULL, "\n");
-      if (strcmp(arg, "files") == 0) {
-        pthread_mutex_lock(&filesMutex);
-        sendFileAmount(fd, client_addr);
-        sendFiles(fd, fileList, client_addr);
-        pthread_mutex_unlock(&filesMutex);
-      } else {
-        arg = strtok(arg, " ");
-        if (strcmp(arg, "peers") == 0) {
-          arg = strtok(NULL, "\n");
-          // now arg has the hash of the file
-          pthread_mutex_lock(&filesMutex);
-          pthread_mutex_lock(&usersMutex);
-          sendPeers(fileList, fd, arg, client_addr);
-          pthread_mutex_unlock(&usersMutex);
-          pthread_mutex_unlock(&filesMutex);
+void handleFiles(int fd, struct sockaddr_storage client_addr) {
+  pthread_mutex_lock(&filesMutex);
+  sendFileAmount(fd, client_addr);
+  sendFiles(fd, fileList, client_addr);
+  pthread_mutex_unlock(&filesMutex);
+}
+
+void handlePeers(char * hash, int fd, struct sockaddr_storage client_addr) {
+  pthread_mutex_lock(&filesMutex);
+  pthread_mutex_lock(&usersMutex);
+  sendPeers(fileList, fd, hash, client_addr);
+  pthread_mutex_unlock(&usersMutex);
+  pthread_mutex_unlock(&filesMutex);
+}
+
+void handleChangePassword(char * ipstr, char * portstr, char * oldPassword, char * newPassword, int fd, struct sockaddr_storage client_addr) {
+  fseek(users, 0L, SEEK_END);
+  int usersStrLen = ftell(users);
+  rewind(users);
+  char usersStr[usersStrLen+1];
+  size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
+  usersStr[size] = '\0';
+  char usersCpy[usersStrLen+1];
+  strncpy(usersCpy, usersStr, usersStrLen);
+  usersCpy[usersStrLen] = '\0';
+  char * username = getUsernameFromIpNPort(ipstr, portstr);
+  char * user = getUser(username, usersStr);
+  strtok(user, ",");
+  char * passwordStr = strtok(NULL, "\n");
+  if(strcmp(passwordStr, oldPassword) != 0){
+    sendto(fd, "Incorrect password\n", strlen("Incorrect password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  } else {
+    FILE * newCSV = fopen("auth/temp.csv", "a+");
+    char * bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile;
+    char bufferToStoreUsernameAndPasswordFromUser[MAX_STRING_LENGTH];
+    sprintf(bufferToStoreUsernameAndPasswordFromUser, "%s,%s", username, oldPassword);
+    bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(usersCpy, "\n");
+    while (bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile != NULL) {
+        if (strcmp(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, bufferToStoreUsernameAndPasswordFromUser) != 0) {
+            fputs(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, newCSV);
+            fputc('\n', newCSV);
         }
+        bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(NULL, "\n");
+    }
+    fflush(newCSV);
+    remove("auth/users.csv");
+    fclose(users);
+    fclose(newCSV);
+    rename("auth/temp.csv", "auth/users.csv");
+    users = fopen("auth/users.csv", "a+");
+    registerUser(username, newPassword);
+    sendto(fd, "Password changed successfully\n", strlen("Password changed successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  }
+}
+
+void handleLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr) {
+  if (isCommand(cmd, "PLAIN")) {
+    sendMessage("Already logged in\n", fd, client_addr);
+  } else if (isCommand(cmd, "LIST")) {
+    char * arg = strtok(NULL, "\n");
+    if (arg == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
+    }
+    if (isCommand(arg, "files")) {
+      handleFiles(fd, client_addr);
+    } else {
+      arg = strtok(arg, " ");
+      if (arg == NULL) {
+        _WRONG_PARAMETERS_;
+        return;
+      }
+      if (isCommand(arg, "peers")) {
+        arg = strtok(NULL, "\n");
+        // now arg has the hash of the file
+        handlePeers(arg, fd, client_addr);
+      } else {
+        _WRONG_PARAMETERS_;
+        return;
       }
     }
-    if (strcmp(cmd, "REGISTER") == 0) { // REGISTER <name> <bytes> <hash>
-      char * name = strtok(NULL, " ");
-      char * bytes = strtok(NULL, " ");
-      char * hash = strtok(NULL, "\n");
-	    registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
-    } else
-    if (strcmp(cmd, "CHECK") == 0) {
-      char * user = strtok(NULL, ":");
-      char * ip = strtok(NULL, ":");
-      char * port = strtok(NULL, " ");
-      char * hash = strtok(NULL, "\n");
-
-      printf("%s:%s:%s:%s", user, ip, port, hash);
-      if (ip == NULL || port == NULL || hash == NULL) return;
-      if (checkIpNPort(hash, ip, port)) {
-        sendto(fd, "OK - User and file are available\n", strlen("OK - User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-        addLeecher(hash, ipstr, portstr);
-      } else
-        sendto(fd, "ERR - User or file is unavailable\n", strlen("ERR - User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-    } else
-    if (strcmp(cmd, "CHANGEPASSWORD") == 0){ //CHANGEPASSWORD oldPassword newPassword
-      char * oldPassword = strtok(NULL, " ");
-      char * newPassword = strtok(NULL, "\n");
-
-      if(strcmp(oldPassword, newPassword)==0){
-        sendto(fd, "New password cannot be the same as old password\n", strlen("New password cannot be the same as old password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-      } else {
-        fseek(users, 0L, SEEK_END);
-        int usersStrLen = ftell(users);
-        rewind(users);
-        char usersStr[usersStrLen+1];
-        size_t size = fread(usersStr, sizeof(char), usersStrLen, users);
-        usersStr[size] = '\0';
-        char usersCpy[usersStrLen+1];
-        strncpy(usersCpy, usersStr, usersStrLen);
-        usersCpy[usersStrLen] = '\0';
-        char * username = getUsernameFromIpNPort(ipstr, portstr);
-        char * user = getUser(username, usersStr);
-
-        strtok(user, ",");
-        char * passwordStr = strtok(NULL, "\n");
-
-        if(strcmp(passwordStr, oldPassword) != 0){
-          sendto(fd, "Incorrect password\n", strlen("Incorrect password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-        } else {
-          FILE * newCSV = fopen("auth/temp.csv", "a+");
-          char * bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile;
-          char bufferToStoreUsernameAndPasswordFromUser[MAX_STRING_LENGTH];
-          sprintf(bufferToStoreUsernameAndPasswordFromUser, "%s,%s", username, oldPassword);
-          bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(usersCpy, "\n");
-          while (bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile != NULL) {
-              if (strcmp(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, bufferToStoreUsernameAndPasswordFromUser) != 0) {
-                  fputs(bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile, newCSV);
-                  fputc('\n', newCSV);
-              }
-              bufferToStoreUsernameAndPasswordTemporarilyToAddToNewCsvFile = strtok(NULL, "\n");
-          }
-          fflush(newCSV);
-          remove("auth/users.csv");
-          fclose(users);
-          fclose(newCSV);
-          rename("auth/temp.csv", "auth/users.csv");
-          users = fopen("auth/users.csv", "a+");
-
-          registerUser(username, newPassword);
-
-          sendto(fd, "Password changed successfully\n", strlen("Password changed successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-        }
-      }
-
-    } else if (strcmp(cmd, "SIZE") == 0) {
-      char * hash = strtok(NULL, "\n");
-      getSize(hash, fd, client_addr);
-    } else if (strcmp(cmd, "SETPORT") == 0) {
-      char * newPort = strtok(NULL, "\n");
-      setSeederPort(ipstr, portstr, newPort);
+  } else if (isCommand(cmd, "REGISTER")) {
+    char * name = strtok(NULL, " ");
+    char * bytes = strtok(NULL, " ");
+    char * hash = strtok(NULL, "\n");
+    if (name == NULL || bytes == NULL || hash == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
     }
-	else if (strcmp(cmd, "NAME") == 0){
-      char * hash = strtok(NULL, "\n");
+	  registerFile(name, bytes, hash, ipstr, portstr, fd, client_addr);
+  } else if (isCommand(cmd, "CHECK")) {
+    char * ip = strtok(NULL, ":");
+    char * port = strtok(NULL, " ");
+    char * hash = strtok(NULL, "\n");
+    if (ip == NULL || port == NULL || hash == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
+    }
+    if (checkIpNPort(hash, ip, port)) {
+      sendto(fd, "User and file are available\n", strlen("User and file are available\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+      addLeecher(hash, ipstr, portstr);
+    } else
+      sendto(fd, "User or file is unavailable\n", strlen("User or file is unavailable\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+  } else if (isCommand(cmd, "CHANGEPASSWORD")) {
+    char * oldPassword = strtok(NULL, " ");
+    char * newPassword = strtok(NULL, "\n");
+
+    if (oldPassword == NULL || newPassword == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
+    }
+
+    if(strcmp(oldPassword, newPassword) == 0){
+      sendto(fd, "New password cannot be the same as old password\n", strlen("New password cannot be the same as old password\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    } else {
+      handleChangePassword(ipstr, portstr, oldPassword, newPassword, fd, client_addr);
+    }
+  } else if (isCommand(cmd, "SIZE")) {
+    char * hash = strtok(NULL, "\n");
+    if (hash == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
+    }
+    getSize(hash, fd, client_addr);
+  } else if (isCommand(cmd, "SETPORT")) {
+    char * newPort = strtok(NULL, "\n");
+    if (newPort == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
+    }
+    setSeederPort(ipstr, portstr, newPort);
+  } else if (isCommand(cmd, "NAME")) {
+    char * hash = strtok(NULL, "\n");
+    if (hash == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
+    }
 	  char * nameStr = name(hash);
-	  if(nameStr == NULL){
-		sendto(fd, "No file with hash specified\n", strlen("No file with hash specified\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+	  if (nameStr == NULL) {
+		  sendto(fd, "No file with hash specified\n", strlen("No file with hash specified\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
 		return;
 	  }
 	  int bufferSize = strlen(nameStr)+1;
-      char buffer[bufferSize+1];
+    char buffer[bufferSize+1];
 	  sprintf(buffer, "%s\n", nameStr);
-      sendto(fd, buffer, bufferSize, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-	}
-	else if (strcmp(cmd, "USERNAME") == 0) {
+    sendto(fd, buffer, bufferSize, 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+	} else if (isCommand(cmd, "USERNAME")) {
 	  char * ip = strtok(NULL, " ");
 	  char * port = strtok(NULL, "\n");
-	  char * username = getUsernameFromIpNPort(ip, port);
-	  if(username==NULL) sendto(fd, "No user\n", strlen("No user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-	  else sendto(fd, username, strlen(username), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-	}
-  } else {
-    if (strcmp(cmd, "PLAIN") == 0) { // PLAIN user:password
-      char * user = strtok(NULL, ":");
-      char * password = strtok(NULL, "\n");
-      int loginState = loginUser(user, password, fd, client_addr);
-      if (loginState > 0 && loginState < 3) {
-        if (state == NULL)
-          state = calloc(1,sizeof(struct TrackerState));
-        UserState node = (UserState) {.next = NULL };
-        strncpy(node.username, user, MAX_USERNAME_SIZE-1);
-        node.username[MAX_USERNAME_SIZE-1] = '\0';
-        strncpy(node.ip, ipstr, IP_LEN-1);
-        node.ip[IP_LEN-1] = '\0';
-        strncpy(node.port, portstr, PORT_LEN-1);
-        node.port[PORT_LEN-1] = '\0';
-        insertUser(node);
-        if (loginState == 1)
-          sendto(fd, "OK - Logged in successfully\n", strlen("OK - Logged in successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-        else
-          sendto(fd, "OK - Registered successfully\n", strlen("OK - Registered successfully\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-      } else if (loginState !=3){
-          sendto(fd, "ERR - Incorrect password for user\n", strlen("ERR - Incorrect password for user\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-      }
-    } else if (strcmp(cmd, "REGISTER") != 0){
-      sendto(fd, "Authentication failed\n", strlen("Authentication failed\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
+    if (ip == NULL || port == NULL) {
+      _WRONG_PARAMETERS_;
+      return;
     }
+	  char * username = getUsernameFromIpNPort(ip, port);
+	  if(username==NULL) 
+      sendMessage("No user\n", fd, client_addr);
+	  else 
+      sendMessage(username, fd, client_addr);
+	} else if (!isCommand(cmd, "QUIT\n")) {
+    sendMessage("Invalid command\n", fd, client_addr);
+  }
+}
+
+void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr) {
+  char * user = strtok(NULL, ":");
+  char * password = strtok(NULL, "\n");
+  if (user == NULL || password == NULL) {
+    _WRONG_PARAMETERS_;
+    return;
+  }
+    
+  int loginState = loginUser(user, password, fd, client_addr);
+
+  if (loginState == LOGGEDIN || loginState == REGISTERED) {
+    if (state == NULL) {
+      state = calloc(1,sizeof(struct TrackerState));
+      if (state == NULL) {
+        printf("Could not assign memory for state\n");
+        return;
+      }
+    }
+
+    UserState node = (UserState) {.next = NULL };
+
+    strncpy(node.username, user, MAX_USERNAME_SIZE-1);
+    node.username[MAX_USERNAME_SIZE-1] = '\0';
+
+    strncpy(node.ip, ipstr, IP_LEN-1);
+    node.ip[IP_LEN-1] = '\0';
+
+    strncpy(node.port, portstr, PORT_LEN-1);
+    node.port[PORT_LEN-1] = '\0';
+
+    insertUser(node);
+    if (loginState == LOGGEDIN) {
+      sendMessage("Logged in sucesfully\n", fd, client_addr);
+    } else {
+      sendMessage("Registered successfully\n", fd, client_addr);
+    }
+  } else if (loginState != NOTREGISTERED) {
+    sendMessage("Incorrect password for user\n", fd, client_addr);
+  }
+}
+
+bool isCommand(char * cmd, const char * cmdTest) {
+  return strcmp(cmd, cmdTest) == 0;
+}
+
+void handleNotLoggedInCmd(char * cmd, char * ipstr, char * portstr, int fd,  struct sockaddr_storage client_addr) {
+  if (isCommand(cmd, "PLAIN")) { // PLAIN user:password
+    handlePLAINLoggedIn(cmd, ipstr, portstr, fd, client_addr);
+  } else if (!isCommand(cmd, "REGISTER")) {
+    sendMessage("Authentication failed\n", fd, client_addr);
+  }
+}
+
+void handleQUIT(char * ipstr, char * portstr) {
+  pthread_mutex_lock(&filesMutex);
+  pthread_mutex_lock(&usersMutex);
+  removeFileSeeder(ipstr, portstr);
+  removeLoggedUser(ipstr, portstr);
+  pthread_mutex_unlock(&usersMutex);
+  pthread_mutex_unlock(&filesMutex);
+}
+
+void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr) {
+  if (userIsLoggedIn(ipstr, portstr)) {
+    handleLoggedInCmd(cmd, ipstr, portstr, fd, client_addr);
+  } else {
+    handleNotLoggedInCmd(cmd, ipstr, portstr, fd, client_addr);
   }
 
   if (strcmp(strtok(cmd,"\n"), "QUIT") == 0) {
-    pthread_mutex_lock(&filesMutex);
-    pthread_mutex_lock(&usersMutex);
-    removeFileSeeder(ipstr, portstr);
-    removeLoggedUser(ipstr, portstr);
-    pthread_mutex_unlock(&usersMutex);
-    pthread_mutex_unlock(&filesMutex);
+    handleQUIT(ipstr, portstr);
   }
 }
 
@@ -784,8 +934,8 @@ void tracker_handler(struct selector_key * key) {
   char buffer[MAX_STRING_LENGTH];
   ssize_t bytesRecv = recvfrom(key->fd, buffer, MAX_STRING_LENGTH, 0, (struct sockaddr *) &client_addr, &client_addr_len);
   //if (bytesRecv < 0) return;
-  char portstr[6] = {0};
-  char ipstr[16] = {0};
+  char portstr[PORT_LEN] = {0};
+  char ipstr[IP_LEN] = {0};
   getnameinfo((struct sockaddr*)&client_addr, sizeof(struct sockaddr_storage), ipstr, sizeof(ipstr), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
   if (bytesRecv <= 0) {
     removeFileSeeder(ipstr, portstr);
@@ -819,24 +969,20 @@ int loginUser(char * username, char * password, int fd, struct sockaddr_storage 
   char* user = getUser(username, usersStr);
 
   if (user == NULL) {
-	int len = strlen("Create user ")+MAX_USERNAME_SIZE+ strlen("? (y/n): ")+1;
+	  int len = strlen("Create user ")+MAX_USERNAME_SIZE+ strlen("? (y/n): ")+1;
 	  char msg[len];
-	  strcpy(msg, "Create user ");
-	  strcat(msg, username);
-      strcat(msg, "? (y/n): ");
+    sprintf(msg, "Create user %s? (y/n): ", username);
 	  sendto(fd, msg, strlen(msg), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-
-      if(lineConfirms(fd, client_addr)){
-        registerUser(username, password);
-		return 2;
-      }
+    if(lineConfirms(fd, client_addr)){
+      registerUser(username, password);
+		  return REGISTERED;
+    }
 	  sendto(fd, "New user not registered.\n", strlen("New user not registered.\n"), 0, (struct sockaddr *) &client_addr, sizeof(client_addr));
-	  return 3;
+	  return NOTREGISTERED;
   } else {
     strtok(user, ",");
     char * passwordStr = strtok(NULL, "\n");
     return strcmp(password, passwordStr) == 0;
   }
-  return false;
+  return FAILED;
 }
-
