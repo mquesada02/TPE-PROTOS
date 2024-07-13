@@ -572,6 +572,7 @@ void SeederRead(struct selector_key *key) {
     if(aux <= 0) {
         perror("Failed to connect (recv) to seeder");
         SEEDER(key)->killFlag = true;
+        selector_set_interest(key->s, key->fd, OP_WRITE);
         pthread_mutex_unlock(&SEEDER(key)->mutex);
         return;
     }
