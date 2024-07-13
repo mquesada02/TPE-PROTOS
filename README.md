@@ -36,6 +36,6 @@ Esto creará un ejecutable, para obtener una lista de argumentos posibles agrega
 
 Cualquier archivo en la carpeta ```/repository``` será añadido al tracker y podrá ser compartido con otros clientes.
 
-En caso de descargar un archivo, este será instalado en la carpeta ```/downloads```.
+En caso de descargar un archivo, este será instalado en la misma carpeta.
 
 Una lista de comandos posibles puede ser obtenido al ejecutar ```help``` dentro de la línea de comandos de la aplicación.
