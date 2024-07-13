@@ -14,7 +14,7 @@
 #include <pthread.h>
 
 #include "../include/utils.h"
-#include "../include/fileMap.h"
+#include "../include/fileList.h"
 #define REPO_PATH "../repository"
 #define PATH_SIZE 1024
 #define DT_REG 8 //redefinido pues no es reconocido por alguna razon
@@ -27,7 +27,7 @@ typedef struct StateValue {
     int timesAttempted;
 } StateValue;
 
-fileMap map;
+
 size_t bufferSize = 0;
 char* buffer = NULL;
 size_t stateMapSize = 0;
@@ -43,7 +43,7 @@ size_t bytesReadPerSection;
 
 
 size_t copyFromFile(char* buffer,char* md5,size_t offset,size_t bytes,int* statusCode){
-    FILE* file=lookup(map,md5);
+    FILE* file=findFile(md5);
     if(file==NULL){
         *statusCode=FILE_ERROR_READING;
         return 0;
@@ -56,7 +56,7 @@ size_t copyFromFile(char* buffer,char* md5,size_t offset,size_t bytes,int* statu
 }
 
 int addFile(char* md5,char* filename){
-    FILE* file=lookup(map,md5);
+    FILE* file=findFile(md5);
     if(file!=NULL)
         return 1;
     char pathname[PATH_SIZE];
@@ -65,7 +65,7 @@ int addFile(char* md5,char* filename){
     file=fopen(pathname,"rb");
     if(file==NULL)
         return -1;
-    insert(map,md5,file);
+    insertFile(md5,file);
     return 0;
 }
 size_t addBytesRead(size_t bytes){
@@ -77,7 +77,7 @@ size_t getBytesRead(){
 }
 
 size_t getFileSize(char* md5){
-    FILE* file=lookup(map,md5);
+    FILE* file=findFile(md5);
     if(file==NULL)
         return -1;
     size_t current=ftell(file);
@@ -88,19 +88,17 @@ size_t getFileSize(char* md5){
 }
 
 int removeFile(char* md5){
-    return removeEntry(map,md5);
+    return removeFile(md5);
 }
 
 
 int initializeFileManager(){
-    map=createMap();
-    if(map==NULL)
-        return -1;
+    initializeList();
     struct dirent* dirnt;
     DIR* dir;
     char pathname[PATH_SIZE];
     if((dir=opendir(REPO_PATH))==NULL){
-        freeMap(map);
+        freeList();
         return -2;
     }
     while((dirnt=readdir(dir))){
@@ -110,7 +108,7 @@ int initializeFileManager(){
             FILE* file=fopen(pathname,"rb");
             calculateMD5(pathname,md5Buffer);
             if(file!=NULL) {
-                insert(map, md5Buffer, file);
+                insertFile(md5Buffer, file);
                 printf("%s\n", md5Buffer);
             }
         }
@@ -120,7 +118,7 @@ int initializeFileManager(){
 }
 
 void endFileManager(){
-    freeMap(map);
+    freeList();
 }
 
 char* getFilenamePath(){
@@ -145,7 +143,7 @@ void initFileBuffer(char* newFilename, size_t size) {
     }
     filename = malloc(strlen(newFilename)+1);
     strcpy(filename, newFilename);
-    char* aux = getFilenamePath(); 
+    char* aux = getFilenamePath();
     if(access(aux, F_OK) == 0) {
         remove(aux); //elimina el archivo si ya existía para reemplazarlo
     }
