@@ -10,7 +10,7 @@
 #define REQUEST_BUFFER_SIZE 256
 #define MAX_USER_LEN 32
 
-struct PeerMng {
+struct SeederMng {
     bool killFlag;
     bool killFlagAck;
 
@@ -55,14 +55,14 @@ int setupLeecherSocket(const char *service, const char **errmsg);
 
 struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char **errmsg);
 
-int setupPeerSocket(const char *ip, const char *port);
+int setupSeederSocket(const char *ip, const char *port);
 
 void leecherHandler(struct selector_key *key);
 
-struct PeerMng * addPeer(struct selector_key *key, char *user, char *hash, char *ip, char *port);
+struct SeederMng * addSeeder(struct selector_key *key, char *user, char *hash, char *ip, char *port);
 
-int requestFromPeer(struct PeerMng * peer, char *hash, size_t byteFrom, size_t byteTo);
+int requestFromSeeder(struct SeederMng * seeder, char *hash, size_t byteFrom, size_t byteTo);
 
-int readFromPeer(struct PeerMng * peer, char buff[CHUNKSIZE]);
+int readFromSeeder(struct SeederMng * seeder, char buff[CHUNKSIZE]);
 
 #endif //TPE_PROTOS_CONNECTIONMANAGER_H

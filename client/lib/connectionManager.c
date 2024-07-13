@@ -32,15 +32,15 @@ static char addrBuffer[MAX_ADDR_BUFFER];
 int connections = 0;
 
 #define LEECH(key) ( (struct LeecherMng *)(key)->data )
-#define PEER(key) ( (struct PeerMng *)(key)->data )
+#define SEEDER(key) ( (struct SeederMng *)(key)->data )
 #define LEECH_HANDLER(key) ( (struct LeecherHandlerMng *)(key)->data )
 
 void leecherRead(struct selector_key *key);
 void leecherWrite(struct selector_key *key);
 static void quit(struct selector_key *key);
-void peerRead(struct selector_key *key);
-void peerWrite(struct selector_key *key);
-void cleanupPeerMng(struct PeerMng *peer);
+void SeederRead(struct selector_key *key);
+void SeederWrite(struct selector_key *key);
+void cleanupSeederMng(struct SeederMng *peer);
 
 static const struct fd_handler leechersHandler = {
         .handle_read   = leecherRead,
@@ -50,8 +50,8 @@ static const struct fd_handler leechersHandler = {
 };
 
 static const struct fd_handler peerHandler = {
-        .handle_read = peerRead,
-        .handle_write = peerWrite,
+        .handle_read = SeederRead,
+        .handle_write = SeederWrite,
         .handle_close  = NULL,
         .handle_block  = NULL,
 };
@@ -440,10 +440,10 @@ struct Tracker * setupTrackerSocket(const char *ip, const char *port, const char
     return tracker;
 }
 
-struct PeerMng *initializePeerMng() {
-    struct PeerMng *peer = malloc(sizeof(struct PeerMng));
+struct SeederMng *initializeSeederMng() {
+    struct SeederMng *peer = malloc(sizeof(struct SeederMng));
     if (peer == NULL) {
-        perror("Failed to allocate memory for PeerMng");
+        perror("Failed to allocate memory for SeederMng");
         return NULL;
     }
 
@@ -462,14 +462,14 @@ struct PeerMng *initializePeerMng() {
     return peer;
 }
 
-void cleanupPeerMng(struct PeerMng *peer) {
+void cleanupSeederMng(struct SeederMng *peer) {
     if (peer != NULL) {
         pthread_mutex_destroy(&peer->mutex);
         free(peer);
     }
 }
 
-int setupPeerSocket(const char *ip, const char *port) {
+int setupSeederSocket(const char *ip, const char *port) {
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -513,18 +513,18 @@ int setupPeerSocket(const char *ip, const char *port) {
 
 }
 
-struct PeerMng * addPeer(struct selector_key *key, char *user, char *hash, char *ip, char *port) {
+struct SeederMng * addSeeder(struct selector_key *key, char *user, char *hash, char *ip, char *port) {
     int socket;
-    struct PeerMng * mng = NULL;
+    struct SeederMng * mng = NULL;
 
-    socket = setupPeerSocket(ip, port);
+    socket = setupSeederSocket(ip, port);
 
     if(socket == -1){
         perror("Failed to connect to peer");
         goto fail;
     }
 
-    mng = initializePeerMng();
+    mng = initializeSeederMng();
 
     if(mng == NULL)
         goto fail;
@@ -542,23 +542,23 @@ struct PeerMng * addPeer(struct selector_key *key, char *user, char *hash, char 
         close(socket);
     }
     if(mng != NULL) {
-        cleanupPeerMng(mng);
+        cleanupSeederMng(mng);
     }
     return NULL;
 }
 
-void peerRead(struct selector_key *key) {
-    pthread_mutex_lock(&PEER(key)->mutex);
+void SeederRead(struct selector_key *key) {
+    pthread_mutex_lock(&SEEDER(key)->mutex);
 
-    if(PEER(key)->killFlag) {
-        if(PEER(key)->killFlagAck) {
+    if(SEEDER(key)->killFlag) {
+        if(SEEDER(key)->killFlagAck) {
             selector_unregister_fd(key->s, key->fd);
             close(key->fd);
-            pthread_mutex_destroy(&PEER(key)->mutex);
-            free(PEER(key));
+            pthread_mutex_destroy(&SEEDER(key)->mutex);
+            free(SEEDER(key));
             return;
         }
-        pthread_mutex_unlock(&PEER(key)->mutex);
+        pthread_mutex_unlock(&SEEDER(key)->mutex);
         return;
     }
 
@@ -568,8 +568,8 @@ void peerRead(struct selector_key *key) {
 
     if(aux <= 0) {
         perror("Failed to connect (recv) to seeder");
-        PEER(key)->killFlag = true;
-        pthread_mutex_unlock(&PEER(key)->mutex);
+        SEEDER(key)->killFlag = true;
+        pthread_mutex_unlock(&SEEDER(key)->mutex);
         return;
     }
 
@@ -577,79 +577,79 @@ void peerRead(struct selector_key *key) {
 
     size_t totalBytesReceived = 0;
     while (totalBytesReceived < totalBytesIncoming) {
-        size_t bytes = recv(key->fd, PEER(key)->responseBuffer + totalBytesReceived, totalBytesIncoming - totalBytesReceived, 0);
+        size_t bytes = recv(key->fd, SEEDER(key)->responseBuffer + totalBytesReceived, totalBytesIncoming - totalBytesReceived, 0);
         if (bytes > 0) {
             totalBytesReceived += bytes;
         } else {
-            PEER(key)->killFlag = true;
+            SEEDER(key)->killFlag = true;
             perror("Failed to connect (recv) to seeder2");
             break;
         }
     }
-    PEER(key)->readReady = true;
+    SEEDER(key)->readReady = true;
     addBytesRead(totalBytesReceived);
 
     selector_set_interest(key->s, key->fd, OP_WRITE);
-    pthread_mutex_unlock(&PEER(key)->mutex);
+    pthread_mutex_unlock(&SEEDER(key)->mutex);
 }
 
-void peerWrite(struct selector_key *key) {
-    pthread_mutex_lock(&PEER(key)->mutex);
+void SeederWrite(struct selector_key *key) {
+    pthread_mutex_lock(&SEEDER(key)->mutex);
 
-    if(PEER(key)->killFlag) {
-        if(PEER(key)->killFlagAck) {
+    if(SEEDER(key)->killFlag) {
+        if(SEEDER(key)->killFlagAck) {
             selector_unregister_fd(key->s, key->fd);
             close(key->fd);
-            pthread_mutex_destroy(&PEER(key)->mutex);
-            free(PEER(key));
+            pthread_mutex_destroy(&SEEDER(key)->mutex);
+            free(SEEDER(key));
             return;
         }
-        pthread_mutex_unlock(&PEER(key)->mutex);
+        pthread_mutex_unlock(&SEEDER(key)->mutex);
         return;
     }
 
-    if (!PEER(key)->writeReady || PEER(key)->readReady) {
-        pthread_mutex_unlock(&PEER(key)->mutex);
+    if (!SEEDER(key)->writeReady || SEEDER(key)->readReady) {
+        pthread_mutex_unlock(&SEEDER(key)->mutex);
         return;
     }
 
-    ssize_t bytes = send(key->fd, PEER(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
+    ssize_t bytes = send(key->fd, SEEDER(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0);
 
     if (bytes <= 0) {
-        PEER(key)->killFlag = true;
+        SEEDER(key)->killFlag = true;
         perror("Failed to connect (send) to seeder");
-        pthread_mutex_unlock(&PEER(key)->mutex);
+        pthread_mutex_unlock(&SEEDER(key)->mutex);
         return;
     }
 
-    memset(PEER(key)->requestBuffer, '\0', REQUEST_BUFFER_SIZE);
+    memset(SEEDER(key)->requestBuffer, '\0', REQUEST_BUFFER_SIZE);
 
-    PEER(key)->writeReady = false;
+    SEEDER(key)->writeReady = false;
 
-    pthread_mutex_unlock(&PEER(key)->mutex);
+    pthread_mutex_unlock(&SEEDER(key)->mutex);
     selector_set_interest(key->s, key->fd, OP_READ);
 }
 
-int requestFromPeer(struct PeerMng * peer, char *hash, size_t byteFrom, size_t byteTo) {
+int requestFromSeeder(struct SeederMng * seeder, char *hash, size_t byteFrom, size_t byteTo) {
     if (byteTo <= byteFrom + 1) {
         return -1;
     }
 
-    if(peer->readReady) {
+    if(seeder->readReady) {
         return -1;
     }
 
-    snprintf(peer->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%lu:%lu:%s", hash, byteFrom, byteTo, peer->user);
-    memset(peer->responseBuffer, 0, sizeof(peer->responseBuffer));
+    snprintf(seeder->requestBuffer, REQUEST_BUFFER_SIZE, "%s:%lu:%lu:%s", hash, byteFrom, byteTo, seeder->user);
+    memset(seeder->responseBuffer, 0, sizeof(seeder->responseBuffer));
 
-    peer->writeReady = true;
+    seeder->writeReady = true;
     return 0;
 }
 
-int readFromPeer(struct PeerMng * peer, char buff[CHUNKSIZE]) {
-    if(peer->readReady) {
-        peer->readReady = false;
-        memcpy(buff, peer->responseBuffer, CHUNKSIZE);
+int readFromSeeder(struct SeederMng * seeder, char buff[CHUNKSIZE]) {
+    if(seeder->readReady) {
+        seeder->readReady = false;
+        memcpy(buff, seeder->responseBuffer, CHUNKSIZE);
         return 0;
     }
     return -1;

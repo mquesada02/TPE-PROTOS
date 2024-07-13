@@ -34,7 +34,7 @@ struct SeedersList {
 };
 
 struct Peer {
-    struct PeerMng *peer;
+    struct SeederMng *peer;
     char ip[IP_LEN + 1];
     char port[PORT_LEN + 1];
     int status;
@@ -183,7 +183,7 @@ void* handleDownload() {
                         case READ_READY:
                             pthread_mutex_lock(&peers[i].peer->mutex);
                             memset(buff, 0, CHUNKSIZE);
-                            if (readFromPeer(peers[i].peer, buff) != -1) {
+                            if (readFromSeeder(peers[i].peer, buff) != -1) {
                                 retrievedChunk(peers[i].currByte, buff);
                                 peers[i].status = WAITING;
                             }
@@ -215,7 +215,7 @@ void* handleDownload() {
                                 pthread_mutex_unlock(&peers[i].peer->mutex);
                                 break;
                             }
-                            if (requestFromPeer(peers[i].peer, fileHash, byte, byte + CHUNKSIZE) == -1) {
+                            if (requestFromSeeder(peers[i].peer, fileHash, byte, byte + CHUNKSIZE) == -1) {
                                 peers[i].status = READ_READY;
                             }
                             peers[i].currByte = byte;
@@ -603,7 +603,7 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
 
     while(activePeers < MAX_PEERS && availableSeeders > 0) {
         if(getSeeder(peers[activePeers].ip, peers[activePeers].port)) {
-            struct PeerMng *p = addPeer(key, user, hash, peers[activePeers].ip, peers[activePeers].port);
+            struct SeederMng *p = addSeeder(key, user, hash, peers[activePeers].ip, peers[activePeers].port);
             if (p != NULL) {
                 peers[activePeers].peer = p;
                 peers[activePeers].status = WAITING;
