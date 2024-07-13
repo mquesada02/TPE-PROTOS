@@ -885,12 +885,12 @@ void handlePLAINLoggedIn(char * cmd, char * ipstr, char * portstr, int fd,  stru
 
     insertUser(node);
     if (loginState == LOGGEDIN) {
-      sendMessage("Logged in sucesfully\n", fd, client_addr);
+      sendMessage("OK - Logged in sucesfully\n", fd, client_addr);
     } else {
-      sendMessage("Registered successfully\n", fd, client_addr);
+      sendMessage("OK - Registered successfully\n", fd, client_addr);
     }
   } else if (loginState != NOTREGISTERED) {
-    sendMessage("Incorrect password for user\n", fd, client_addr);
+    sendMessage("ERR - Incorrect password for user\n", fd, client_addr);
   }
 }
 
