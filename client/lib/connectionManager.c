@@ -184,12 +184,12 @@ void leecherHandler(struct selector_key *key) {
         goto fail;
     }
 
+    memset(mng, 0, sizeof(*mng));
+
     mng->registered = false;
     mng->trackerSocket = LEECH_HANDLER(key)->tracker->socket;
     mng->trackerAddr = LEECH_HANDLER(key)->tracker->trackerAddr;
     mng->sendingMutex = LEECH_HANDLER(key)->tracker->sendingMutex;
-
-    memset(mng, 0, sizeof(*mng));
 
 
     if(SELECTOR_SUCCESS != selector_register(key->s, leecher, &leechersHandler, OP_READ, mng)) {
@@ -273,24 +273,26 @@ void leecherRead(struct selector_key *key) {
 
 
         snprintf(LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, "%s %s:%s:%s:%s\n", "CHECK", user, LEECH(key)->ip, LEECH(key)->port, LEECH(key)->hash);
-        /*
+
         pthread_mutex_lock(&LEECH(key)->sendingMutex);
         if (sendto(LEECH(key)->trackerSocket, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0, (struct sockaddr *)LEECH(key)->trackerAddr, sizeof(struct sockaddr_in)) <= 0) {
+            perror("failed");
             pthread_mutex_unlock(&LEECH(key)->sendingMutex);
             goto auth_fail;
         }
 
         socklen_t plen = sizeof(struct sockaddr_in);
         if (recvfrom(LEECH(key)->trackerSocket, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0, (struct sockaddr *)LEECH(key)->trackerAddr, &plen) <= 0) {
+            perror("failed");
             pthread_mutex_unlock(&LEECH(key)->sendingMutex);
             goto auth_fail;
         }
         pthread_mutex_unlock(&LEECH(key)->sendingMutex);
 
-        if (strncmp(LEECH(key)->requestBuffer, "OK", 2) != 0) {
+        /*if (strncmp(LEECH(key)->requestBuffer, "OK", 2) != 0) {
             goto auth_fail;
-        }
-         */
+        }*/
+
 
         LEECH(key)->registered = true;
         addLeecher(LEECH(key)->ip, LEECH(key)->port, LEECH(key)->hash);
