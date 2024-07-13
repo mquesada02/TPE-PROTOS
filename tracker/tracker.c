@@ -16,6 +16,8 @@
 #define PORT_LEN 6
 
 #define _WRONG_PARAMETERS_ sendMessage("Invalid parameter amount\n", fd, client_addr)
+#define LOCALHOST "127.0.0.1"
+
 
 enum { FAILED, LOGGEDIN, REGISTERED, NOTREGISTERED };
 
@@ -320,9 +322,7 @@ UserState * _insertUser(UserState * node, UserState value) {
 }
 
 void insertUser(UserState value) {
-  pthread_mutex_lock(&usersMutex);
   state->first = _insertUser(state->first, value);
-  pthread_mutex_unlock(&usersMutex);
 }
 
 char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port) {
@@ -366,6 +366,7 @@ FileList * _removeFileSeeder(FileList * node, char * username) {
 
 void removeFileSeeder(char * ip, char * port) {
   char * username = getUsernameFromIpNPort(ip, port);
+  if (username == NULL) return;
   fileList = _removeFileSeeder(fileList, username);
 }
 
@@ -645,12 +646,10 @@ void findNAddLeecher(FileList * node, char * hash, char * username) {
 }
 
 void addLeecher(char * hash, char * ip, char * port) {
-  pthread_mutex_lock(&usersMutex);
   pthread_mutex_lock(&filesMutex);
   char * username = getUsernameFromIpNPort(ip, port);
   findNAddLeecher(fileList, hash, username);
   pthread_mutex_unlock(&filesMutex);
-  pthread_mutex_unlock(&usersMutex);
 }
 
 bool userIsLoggedIn(char * ip, char * port) {
@@ -712,9 +711,7 @@ void handleFiles(int fd, struct sockaddr_storage client_addr) {
 
 void handlePeers(char * hash, int fd, struct sockaddr_storage client_addr) {
   pthread_mutex_lock(&filesMutex);
-  pthread_mutex_lock(&usersMutex);
   sendPeers(fileList, fd, hash, client_addr);
-  pthread_mutex_unlock(&usersMutex);
   pthread_mutex_unlock(&filesMutex);
 }
 
@@ -929,32 +926,36 @@ void handleQUIT(char * ipstr, char * portstr) {
 }
 
 void handleCmd(char * cmd, char * ipstr, char * portstr, int fd, struct sockaddr_storage client_addr, char ** savePtr) {
+  pthread_mutex_lock(&usersMutex);
   if (userIsLoggedIn(ipstr, portstr)) {
     handleLoggedInCmd(cmd, ipstr, portstr, fd, client_addr, savePtr);
   } else {
     handleNotLoggedInCmd(cmd, ipstr, portstr, fd, client_addr, savePtr);
   }
+  pthread_mutex_unlock(&usersMutex);
 
   if (strcmp(__strtok_r(cmd,"\n", savePtr), "QUIT") == 0) {
     handleQUIT(ipstr, portstr);
   }
 }
 
-
 void tracker_handler(struct selector_key * key) {
   struct sockaddr_storage client_addr;
   socklen_t client_addr_len = sizeof(client_addr);
   char buffer[MAX_STRING_LENGTH];
   ssize_t bytesRecv = recvfrom(key->fd, buffer, MAX_STRING_LENGTH, 0, (struct sockaddr *) &client_addr, &client_addr_len);
-  //if (bytesRecv < 0) return;
+  if (bytesRecv < 0) return;
   char portstr[PORT_LEN] = {0};
   char ipstr[IP_LEN] = {0};
   getnameinfo((struct sockaddr*)&client_addr, sizeof(struct sockaddr_storage), ipstr, sizeof(ipstr), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
-  if (bytesRecv <= 0) {
+  struct STUNServer server = (struct STUNServer) {.address = "stun.l.google.com", .port = 19302};
+  if (strcmp(ipstr, LOCALHOST) == 0 && (getPublicIPAddress(server, ipstr) != 0 || bytesRecv <= 0)) {
+    printf("Failed to get public IP\n");
     removeFileSeeder(ipstr, portstr);
     removeLoggedUser(ipstr, portstr);
     return;
   }
+  buffer[bytesRecv] = '\0';
   char * savePtr;
   char * cmd = __strtok_r(buffer, " ", &savePtr);
   if (cmd != NULL)

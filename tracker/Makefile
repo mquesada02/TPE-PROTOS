@@ -1,10 +1,12 @@
 CFLAGS:= -std=c11 -pedantic -lpthread -fsanitize=address -pedantic-errors -g -Wall -Werror -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-discarded-qualifiers -Wno-unused-const-variable -D_POSIX_C_SOURCE=200112L
 TRACKER_CLI:= tracker
-TRACKER_OBJS:= lib/args.o lib/selector.o lib/utils.o tracker.o
+TRACKER_OBJS:= lib/args.o lib/selector.o lib/utils.o lib/STUNExternalIP.o tracker.o
 
 .PHONY: all clean
 
 all:$(TRACKER_CLI)
+
+STUNExternalIP.o: include/STUNExternalIP.h
 
 utils.o: include/utils.h
 

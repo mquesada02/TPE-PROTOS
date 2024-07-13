@@ -15,5 +15,6 @@
 #include "utils.h"
 #include "selector.h"
 #include "args.h"
+#include "STUNExternalIP.h"
 
 #endif
