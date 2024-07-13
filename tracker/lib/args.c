@@ -89,18 +89,6 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
             case 'l':
                 args->socks_addr = optarg;
                 break;
-            case 'P':
-                args->mng_port   = port(optarg);
-                break;
-            case 'u':
-                if(nusers >= MAX_USERS) {
-                    fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
-                    exit(1);
-                } else {
-                    user(optarg, args->users + nusers);
-                    nusers++;
-                }
-                break;
             case 'v':
                 version();
                 exit(0);

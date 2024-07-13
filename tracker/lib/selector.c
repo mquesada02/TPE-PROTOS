@@ -1,3 +1,6 @@
+
+//to-do el codigo en selector.h y selector.c fue obtenido de la catedra de protocolos de comunicacion 1C-2024
+
 /**
  * selector.c - un muliplexor de entrada salida
  */
