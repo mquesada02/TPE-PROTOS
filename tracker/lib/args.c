@@ -46,10 +46,7 @@ static void usage(const char *progname) {
         "Usage: %s [OPTION]...\n"
         "\n"
         "   -h               Imprime la ayuda y termina.\n"
-        "   -l <addr>        Dirección donde servirá el servidor SMTP.\n"
         "   -P <con port>    Puerto entrante para conexiones.\n"
-        "   -u <name>:<pass> Usuario y contraseña de usuario que puede usar el proxy. Hasta 10.\n"
-        "   -v               Imprime información sobre la versión y termina.\n"
         "\n",
         progname);
     exit(1);
@@ -70,7 +67,6 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
     args->disectors_enabled = true;
 
     int c;
-    int nusers = 0;
 
     while (true) {
         int option_index = 0;
