@@ -101,6 +101,7 @@ int initializeFileManager(){
         freeList();
         return -2;
     }
+    printf("Indexing files\n");
     while((dirnt=readdir(dir))){
         if(dirnt->d_type == DT_REG ){
             char md5Buffer[MD5_SIZE+1];
@@ -109,10 +110,10 @@ int initializeFileManager(){
             calculateMD5(pathname,md5Buffer);
             if(file!=NULL) {
                 insertFile(md5Buffer, file);
-                printf("%s\n", md5Buffer);
             }
         }
     }
+    printf("Done\n");
     closedir(dir);
     return 0;
 }
