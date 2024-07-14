@@ -61,6 +61,8 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
     args->mng_addr   = "127.0.0.1";
     args->mng_port   = 8080;
 
+    args->isLocalhost = false;
+
     //args->conf_addr  = "127.0.0.1";
     //args->conf_port  = 2526;
 
@@ -74,7 +76,7 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
             { 0,           0,                 0, 0 }
         };
 
-        c = getopt_long(argc, argv, "hl:P:u:v", long_options, &option_index);
+        c = getopt_long(argc, argv, "hlP:v", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -83,7 +85,10 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
                 usage(argv[0]);
                 break;
             case 'l':
-                args->socks_addr = optarg;
+                args->isLocalhost = true;
+                break;
+            case 'P':
+                args->socks_port = port(optarg);
                 break;
             case 'v':
                 version();

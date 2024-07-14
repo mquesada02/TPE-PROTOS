@@ -21,6 +21,8 @@
 
 enum { FAILED, LOGGEDIN, REGISTERED, NOTREGISTERED };
 
+struct tracker_args args;
+
 typedef struct UserNode {
   char username[MAX_USERNAME_SIZE];
   char ip[IP_LEN];
@@ -186,8 +188,6 @@ void * deleteUncheckedSeeders() {
 
 int main(int argc,char ** argv) {
     unsigned int port = 15555;
-
-    struct tracker_args args;
 
     args.socks_port = port;
 
@@ -985,8 +985,12 @@ void tracker_handler(struct selector_key * key) {
   char portstr[PORT_LEN] = {0};
   char ipstr[IP_LEN] = {0};
   getnameinfo((struct sockaddr*)&client_addr, sizeof(struct sockaddr_storage), ipstr, sizeof(ipstr), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
-  struct STUNServer server = (struct STUNServer) {.address = "stun.l.google.com", .port = 19302};
-  if (strcmp(ipstr, LOCALHOST) == 0 && (getPublicIPAddress(server, ipstr) != 0 || bytesRecv <= 0)) {
+  int public = 0;
+  if (strcmp(ipstr, LOCALHOST) == 0 && !args.isLocalhost) {
+    struct STUNServer server = (struct STUNServer) {.address = "stun.l.google.com", .port = 19302};
+    public = getPublicIPAddress(server, ipstr);
+  }
+  if (public != 0 || bytesRecv <= 0) {
     printf("Failed to get public IP\n");
     removeFileSeeder(ipstr, portstr);
     removeLoggedUser(ipstr, portstr);
