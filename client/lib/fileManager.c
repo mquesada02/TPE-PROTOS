@@ -141,11 +141,14 @@ void initFileBuffer(char* newFilename, size_t size) {
         perror("A file is already being downloaded.");
         return;
     }
-    filename = malloc(strlen(newFilename)+1);
+    filename = malloc(strlen(newFilename)+strlen("(1)")+1);
     strcpy(filename, newFilename);
     char* aux = getFilenamePath();
     if(access(aux, F_OK) == 0) {
-        remove(aux); //elimina el archivo si ya existía para reemplazarlo
+        strcat(filename,"(1)");
+        if(access(filename,F_OK)==0){
+            remove(filename);
+        }
     }
     free(aux);
 
