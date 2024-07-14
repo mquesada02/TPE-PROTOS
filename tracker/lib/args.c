@@ -36,9 +36,27 @@ static void user(char *s, struct user *user) {
 }
 
 static void version(void) {
-    fprintf(stderr, "smtpd version 0.0\n"
+    fprintf(stderr, "Tracker version 0.1\n"
                     "ITBA Protocolos de Comunicación 2024/1 -- Grupo 8\n"
-                    "AQUI VA LA LICENCIA\n");
+                    "MIT License\n"
+                    "Copyright (c) 2024 mquesada tm-sm catamuller NCasella\n"
+                    "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
+                    "of this software and associated documentation files (the \"Software\"), to deal\n"
+                    "in the Software without restriction, including without limitation the rights\n"
+                    "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
+                    "copies of the Software, and to permit persons to whom the Software is\n"
+                    "furnished to do so, subject to the following conditions:\n"
+
+                    "The above copyright notice and this permission notice shall be included in all\n"
+                    "copies or substantial portions of the Software.\n"
+
+                    "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
+                    "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
+                    "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
+                    "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
+                    "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
+                    "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n"
+                    "SOFTWARE.\n");
 }
 
 static void usage(const char *progname) {
@@ -46,6 +64,7 @@ static void usage(const char *progname) {
         "Usage: %s [OPTION]...\n"
         "\n"
         "   -h               Imprime la ayuda y termina.\n"
+        "   -l               Habilita el flag de localhost\n"
         "   -P <con port>    Puerto entrante para conexiones.\n"
         "\n",
         progname);
@@ -61,6 +80,8 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
     args->mng_addr   = "127.0.0.1";
     args->mng_port   = 8080;
 
+    args->isLocalhost = false;
+
     //args->conf_addr  = "127.0.0.1";
     //args->conf_port  = 2526;
 
@@ -74,7 +95,7 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
             { 0,           0,                 0, 0 }
         };
 
-        c = getopt_long(argc, argv, "hl:P:u:v", long_options, &option_index);
+        c = getopt_long(argc, argv, "hlP:v", long_options, &option_index);
 
         if (c == -1)
             break;
@@ -83,7 +104,10 @@ void parse_args(const int argc, char **argv, struct tracker_args *args) {
                 usage(argv[0]);
                 break;
             case 'l':
-                args->socks_addr = optarg;
+                args->isLocalhost = true;
+                break;
+            case 'P':
+                args->socks_port = port(optarg);
                 break;
             case 'v':
                 version();

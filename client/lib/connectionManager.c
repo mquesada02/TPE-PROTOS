@@ -143,8 +143,6 @@ int setupLeecherSocket(const char *service, const char **errmsg) {
             continue;       // Socket creation failed; try next address
         }
 
-        //inet_pton(AF_INET, "181.28.99.176", &addr->ai_addr);
-
         // Bind to ALL the address and set socket to listen
         if ((bind(servSock, addr->ai_addr, addr->ai_addrlen) == 0) && (listen(servSock, MAXPENDING) == 0)) {
             // Print local address of socket
@@ -158,6 +156,8 @@ int setupLeecherSocket(const char *service, const char **errmsg) {
             servSock = -1;
         }
     }
+    int optval = 1;
+    setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 
     struct timeval timeout;
     timeout.tv_sec = TIMEOUT;

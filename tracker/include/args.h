@@ -22,6 +22,7 @@ struct tracker_args {
     unsigned short  mng_port;
 
     bool            disectors_enabled;
+    bool            isLocalhost;
 
     struct user    users[MAX_USERS];
 };
