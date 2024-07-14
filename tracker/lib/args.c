@@ -37,7 +37,7 @@ static void user(char *s, struct user *user) {
 
 static void version(void) {
     fprintf(stderr, "Tracker version 0.1\n"
-                    "ITBA Protocolos de Comunicación 2024/1 -- Grupo 8\n"
+                    "ITBA Protocolos de Comunicación 2024/1 -- Grupo 3\n"
                     "MIT License\n"
                     "Copyright (c) 2024 mquesada tm-sm catamuller NCasella\n"
                     "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
