@@ -19,7 +19,8 @@ The tracker application will
 
 
 .SH OPTIONS
-    -L [PORT] Establishes a connection through specified port instead of using the default
+    -P [PORT] Establishes a connection through specified port instead of using the default
+    -l        Deactivates localhost to public IP conversion
 
 .SH AUTHORS
 Timoteo Smart, Catalina Müller, Manuel Quesada, Nicolas Casella
