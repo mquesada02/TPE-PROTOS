@@ -143,6 +143,8 @@ int setupLeecherSocket(const char *service, const char **errmsg) {
             continue;       // Socket creation failed; try next address
         }
 
+        //inet_pton(AF_INET, "181.28.99.176", &addr->ai_addr);
+
         // Bind to ALL the address and set socket to listen
         if ((bind(servSock, addr->ai_addr, addr->ai_addrlen) == 0) && (listen(servSock, MAXPENDING) == 0)) {
             // Print local address of socket
@@ -294,14 +296,12 @@ void leecherRead(struct selector_key *key) {
 
         pthread_mutex_lock(&LEECH(key)->sendingMutex);
         if (sendto(LEECH(key)->trackerSocket, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0, (struct sockaddr *)LEECH(key)->trackerAddr, sizeof(struct sockaddr_in)) <= 0) {
-            perror("failed");
             pthread_mutex_unlock(&LEECH(key)->sendingMutex);
             goto auth_fail;
         }
 
         socklen_t plen = sizeof(struct sockaddr_in);
         if (recvfrom(LEECH(key)->trackerSocket, LEECH(key)->requestBuffer, REQUEST_BUFFER_SIZE, 0, (struct sockaddr *)LEECH(key)->trackerAddr, &plen) <= 0) {
-            perror("failed");
             pthread_mutex_unlock(&LEECH(key)->sendingMutex);
             goto auth_fail;
         }
@@ -519,7 +519,6 @@ int setupSeederSocket(const char *ip, const char *port) {
 struct SeederMng * addSeeder(struct selector_key *key, char *user, char *hash, char *ip, char *port) {
     int socket;
     struct SeederMng * mng = NULL;
-
     socket = setupSeederSocket(ip, port);
 
     if(socket == -1){

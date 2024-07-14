@@ -241,7 +241,6 @@ void* handleDownload() {
                                     downloading = false;
                                     paused = false;
                                 }
-                                printf("Lost connection with peer %d\n", i);
                                 connectionLost = true;
                                 break;
                             }
@@ -617,7 +616,6 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
     int amountVal = atoi(amount); // the +1 is for the "No more files found"
     int lineCount = 0;
     int seeders = 0;
-    printf("Retrieving seeders\n");
     while(lineCount < amountVal) {
         bytes = receiveMessage(key, responseBuff, responseSize);
         if (bytes <= 0) continue;
@@ -632,8 +630,6 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
             return 0;
         }
 
-        printf("IP: %s\n", seeder->ip);
-
         token = strtok(NULL, "\n");
         if (token != NULL) {
             strncpy(seeder->port, token, PORT_LEN);
@@ -641,14 +637,13 @@ int requestSeeders(struct selector_key *key, char hash[HASH_LEN + 1]) {
         } else {
             return 0;
         }
-        printf("PORT: %s\n", seeder->port);
         seeder->next = seedersList;
         seedersList = seeder;
         seeders++;
         lineCount++;
     }
 
-    printf("%d seeders available\n", seeders);
+    printf("%d seeder(s) available\n", seeders);
 
     return seeders;
 }
@@ -690,13 +685,10 @@ int createSeederConnections(struct selector_key *key, char hash[HASH_LEN + 1]) {
                 peers[activePeers].peer = p;
                 peers[activePeers].status = WAITING;
                 activePeers++;
-                printf("Added seeder\n");
             }
             availableSeeders--;
         }
     }
-
-    printf("Established connection with %d seeders\n", activePeers);
 
     if(activePeers > 0) {
         downloading = true;
