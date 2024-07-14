@@ -156,6 +156,8 @@ int setupLeecherSocket(const char *service, const char **errmsg) {
             servSock = -1;
         }
     }
+    int optval = 1;
+    setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 
     struct timeval timeout;
     timeout.tv_sec = TIMEOUT;
