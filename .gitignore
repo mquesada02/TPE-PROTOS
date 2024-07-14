@@ -6,5 +6,3 @@ cmake-build-debug
 .idea
 client/client
 tracker/tracker
-
-tracker/auth/*
