@@ -21,6 +21,8 @@
 
 enum { FAILED, LOGGEDIN, REGISTERED, NOTREGISTERED };
 
+struct tracker_args args;
+
 typedef struct UserNode {
   char username[MAX_USERNAME_SIZE];
   char ip[IP_LEN];
@@ -70,7 +72,7 @@ ssize_t sendMessage(char * msg, int fd, struct sockaddr_storage client_addr);
 bool lineConfirms(int fd, struct sockaddr_storage client_addr);
 void insertUser(UserState value);
 char * getUsernameFromIpNPort(char * ip, char * port);
-UserNode * removeSeeder(UserNode * seeder, char * username);
+UserNode * removeSeeder(UserNode * seeder, char * ip, char * port, File * file);
 void removeFileSeeder(char * ip, char * port);
 void removeFile(char * MD5);
 UserNode * insertSeeder(File * file, UserNode * first, char * ip, char * port, bool * inserted);
@@ -115,7 +117,7 @@ char * getSeederPort(char * ip, char * port);
 
 UserState * _insertUser(UserState * node, UserState value);
 char * _getUsernameFromIpNPort(UserState * user, char * ip, char * port);
-FileList * _removeFileSeeder(FileList * node, char * username);
+FileList * _removeFileSeeder(FileList * node, char * ip, char * port);
 FileList * _removeFile(FileList * file, char * MD5);
 UserNode * _insertSeeder(File * file, UserNode * node, char * username, char * ip, char * port, bool * inserted);
 FileList * _registerFile(FileList * node, char * name, char * bytes, char * hash, char * ip, char * port, int fd, struct sockaddr_storage client_addr);
@@ -131,7 +133,7 @@ char * _getSeederPort(UserState * node, char * ip, char * port);
 
 // THREAD-ONLY FUNCTIONS
 
-UserNode * _deleteUncheckedSeeders(UserNode* node);
+UserNode * _deleteUncheckedSeeders(UserNode* node, File * file);
 void * deleteUncheckedSeeders();
 
 
@@ -153,15 +155,16 @@ bool lineConfirms(int fd, struct sockaddr_storage client_addr){
 	return (buff[0]=='y' || buff[0]=='Y') && buff[1]=='\n';
 }
 
-UserNode * _deleteUncheckedSeeders(UserNode* node) {
+UserNode * _deleteUncheckedSeeders(UserNode* node, File * file) {
   if (node == NULL) return node;
   if (!node->checked) {
     UserNode * aux = node->next;
+    file->seedersSize--;
     free(node);
     return aux;
   }
   node->checked = false;
-  node->next = _deleteUncheckedSeeders(node->next);
+  node->next = _deleteUncheckedSeeders(node->next, file);
   return node;
 }
 
@@ -170,7 +173,7 @@ void * deleteUncheckedSeeders() {
   while(!done) {
     while(list != NULL && list->file != NULL) {
       pthread_mutex_lock(&filesMutex);
-      list->file->seeders = _deleteUncheckedSeeders(list->file->seeders);
+      list->file->seeders = _deleteUncheckedSeeders(list->file->seeders, list->file);
       FileList * aux = list->next;
       if (list->file->seeders == NULL)
         removeFile(list->file->MD5);
@@ -185,8 +188,6 @@ void * deleteUncheckedSeeders() {
 
 int main(int argc,char ** argv) {
     unsigned int port = 15555;
-
-    struct tracker_args args;
 
     args.socks_port = port;
 
@@ -343,23 +344,24 @@ char * getUsernameFromIpNPort(char * ip, char * port) {
   return _getUsernameFromIpNPort(state->first, ip, port);
 }
 
-UserNode * removeSeeder(UserNode * seeder, char * username) {
+UserNode * removeSeeder(UserNode * seeder, char * ip, char * port, File * file) {
   if (seeder == NULL)
     return seeder;
-  if (strcmp(seeder->username, username) == 0) {
+  if (strcmp(seeder->ip, ip) == 0 && strcmp(seeder->port, port) == 0) {
     UserNode * aux = seeder->next;
+    file->seedersSize--;
     free(seeder);
     return aux;
   }
-  seeder->next = removeSeeder(seeder->next, username);
+  seeder->next = removeSeeder(seeder->next, ip, port, file);
   return seeder;
 }
 
-FileList * _removeFileSeeder(FileList * node, char * username) {
+FileList * _removeFileSeeder(FileList * node, char * ip, char * port) {
   if (node == NULL)
     return node;
-  node->file->seeders = removeSeeder(node->file->seeders, username);
-  node->next = _removeFileSeeder(node->next, username);
+  node->file->seeders = removeSeeder(node->file->seeders, ip, port, node->file);
+  node->next = _removeFileSeeder(node->next, ip, port);
   if (node->file->seeders == NULL) {
     FileList * aux = node->next;
     removeFile(node->file->MD5);
@@ -369,9 +371,7 @@ FileList * _removeFileSeeder(FileList * node, char * username) {
 }
 
 void removeFileSeeder(char * ip, char * port) {
-  char * username = getUsernameFromIpNPort(ip, port);
-  if (username == NULL) return;
-  fileList = _removeFileSeeder(fileList, username);
+  fileList = _removeFileSeeder(fileList, ip, port);
 }
 
 FileList * _removeFile(FileList * file, char * MD5) {
@@ -393,9 +393,8 @@ void removeFile(char * MD5) {
 }
 
 UserNode * _insertSeeder(File * file, UserNode * node, char * username, char * ip, char * port, bool * inserted) {
-  int cmp;
-  if (node == NULL || (cmp = strcmp(username, node->username)) > 0) {
-    // reached the end of the list or passed. Insert new node
+  if (node == NULL) {
+    // reached the end of the list. Insert new node
     UserNode * newNode = calloc(1,sizeof(UserNode));
     strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
     newNode->username[MAX_USERNAME_SIZE-1] = '\0';
@@ -406,12 +405,26 @@ UserNode * _insertSeeder(File * file, UserNode * node, char * username, char * i
     *inserted = true;
     return newNode;
   }
-  if (cmp == 0) {
+  int cmpIp = strcmp(ip, node->ip);
+  int cmpPort = strcmp(port, node->port);
+  if (cmpIp > 0 || (cmpIp == 0 && cmpPort > 0)) {
+    // insert new node. Passed
+    UserNode * newNode = calloc(1,sizeof(UserNode));
+    strncpy(newNode->username, username, MAX_USERNAME_SIZE-1);
+    newNode->username[MAX_USERNAME_SIZE-1] = '\0';
+    strncpy(newNode->ip, ip, IP_LEN);
+    strncpy(newNode->port, port, PORT_LEN);
+    newNode->next = node;
+    newNode->checked = true;
+    *inserted = true;
+    return newNode;
+  }
+  if (cmpIp == 0 && cmpPort == 0) {
     node->checked = true;
+    *inserted = false;
+    return node;
   }
-  if (cmp < 0) {
-    node->next = _insertSeeder(file, node->next, username, ip, port, inserted);
-  }
+  node->next = _insertSeeder(file, node->next, username, ip, port, inserted);
   return node;
 }
 
@@ -972,8 +985,12 @@ void tracker_handler(struct selector_key * key) {
   char portstr[PORT_LEN] = {0};
   char ipstr[IP_LEN] = {0};
   getnameinfo((struct sockaddr*)&client_addr, sizeof(struct sockaddr_storage), ipstr, sizeof(ipstr), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
-  struct STUNServer server = (struct STUNServer) {.address = "stun.l.google.com", .port = 19302};
-  if (strcmp(ipstr, LOCALHOST) == 0 && (getPublicIPAddress(server, ipstr) != 0 || bytesRecv <= 0)) {
+  int public = 0;
+  if (strcmp(ipstr, LOCALHOST) == 0 && !args.isLocalhost) {
+    struct STUNServer server = (struct STUNServer) {.address = "stun.l.google.com", .port = 19302};
+    public = getPublicIPAddress(server, ipstr);
+  }
+  if (public != 0 || bytesRecv <= 0) {
     printf("Failed to get public IP\n");
     removeFileSeeder(ipstr, portstr);
     removeLoggedUser(ipstr, portstr);

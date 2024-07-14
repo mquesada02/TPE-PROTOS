@@ -1,6 +1,15 @@
 # Trabajo Práctico Final - Protocolos de Comunicación
 Nicolás Casella - Catalina Müller - Manuel Quesada - Timoteo Smart (GRUPO 3)
 
+## Manual
+Se puede acceder a los manuales corriendo 
+```
+man ./docs/manClient
+```
+```
+man ./docs/manTracker
+```
+
 ## Compilación y ejecución
 
 - __Es necesario disponer de un entorno linux para poder correr los programas__

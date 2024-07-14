@@ -433,6 +433,7 @@ void filesHandler(PARAMS) {
     int lineCount = 0;
 
     if(amountVal == 1) {
+        bytes = receiveMessage(key, responseBuff, responseSize); // No more files found
         return;
     }
     printf("Files amount: %d\n", amountVal-1);
